@@ -14,6 +14,7 @@
     "fire": "node scripts/fire-test-task.js",
     "seed-goal": "node scripts/seed-goal.js",
     "goal-test": "node scripts/run-goal-test.js",
+    "attack-test": "node scripts/run-attack-scenarios.js",
     "live-test": "electron . --live-test",
     "dist": "electron-builder"
   },
