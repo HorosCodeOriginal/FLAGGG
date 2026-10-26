@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+# language: python3, file: fr-manager, runtime: stdlib only, target: ubuntu/debian host
+"""
+fr-manager — watcher/orchestrator fuer fr-gateway container.
+
+Aufgaben:
+  - keys_raw.txt ueberwachen (alle 30s), neue Keys als eigenen Container starten
+  - Hostport fortlaufend ab 20129, persistente Zuteilung in registry.json
+  - model_family: position in keys_raw.txt (1-22 astra, 23+ opus)
+  - keys.map.json (unique_key -> raw_key) aendern -> betroffene Container neu setzen
+  - --status: Tabelle nr | key-hash | port | container | state | family | tokens | limit | reset
+  - --reaper: Keys die fehlen -> Container stoppen/entfernen (Volume bleibt)
+"""
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+
+BASE = "/opt/fr-gateway"
+KEYS_FILE = os.path.join(BASE, "keys_raw.txt")
+MAP_FILE = os.path.join(BASE, "keys.map.json")
+REGISTRY_FILE = os.path.join(BASE, "registry.json")
+GATEWAY_DIR = os.path.join(BASE, "gateway")
+IMAGE = "fr-gateway:latest"
+
+SEED_PORT = 20129
+PORT_SPAN = 128
+DAILY_LIMIT_DEFAULT = 2000000
+ASTRA_COUNT = 22
+LOG_DIR = "/var/log/fr-gateway"
+DATA_ROOT = "/var/lib/fr-gateway"
+WATCH_INTERVAL = 30
+
+# Nie echte Keys im Repo. Seed nur aus KEYS_FILE / Docker-Secrets.
+SEED_KEYS = []
+
+
+def log(msg, level="info"):
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    line = "[%s] [%s] %s" % (ts, level, msg)
+    print(line, flush=True)
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        with open(os.path.join(LOG_DIR, "manager.log"), "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def run(cmd, timeout=120, check=True):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        log("timeout: " + " ".join(cmd), "error")
+        return 124, "", "timeout"
+    if check and p.returncode != 0:
+        log("cmd fehlgeschlagen (%d): %s" % (p.returncode, " ".join(cmd)), "error")
+        log("stdout: " + p.stdout[-2000:], "error")
+        log("stderr: " + p.stderr[-2000:], "error")
+    return p.returncode, p.stdout, p.stderr
+
+
+# ---------------------------------------------------------------------------
+# registry (liste von eintraegen)
+# ---------------------------------------------------------------------------
+
+def registry_load():
+    if not os.path.exists(REGISTRY_FILE):
+        return []
+    try:
+        with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except Exception as e:
+        log("registry defekt: %s" % e, "error")
+    return []
+
+
+def registry_save(reg):
+    os.makedirs(BASE, exist_ok=True)
+    tmp = REGISTRY_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(reg, f, indent=2, sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, REGISTRY_FILE)
+
+
+# ---------------------------------------------------------------------------
+# keys / map
+# ---------------------------------------------------------------------------
+
+def key_hash(key):
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def container_name(key):
+    return "fr-key-" + key_hash(key)[:12]
+
+
+def read_keys():
+    if not os.path.exists(KEYS_FILE):
+        return []
+    out = []
+    with open(KEYS_FILE, "r", encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                out.append(ln)
+    return out
+
+
+def load_map():
+    if not os.path.exists(MAP_FILE):
+        return {}
+    try:
+        with open(MAP_FILE, "r", encoding="utf-8") as f:
+            m = json.load(f)
+        if isinstance(m, dict):
+            return m
+    except Exception as e:
+        log("map defekt: %s" % e, "error")
+    return {}
+
+
+def raw_to_unique(map_data, raw):
+    for u, r in map_data.items():
+        if r == raw:
+            return u
+    return None
+
+
+# ---------------------------------------------------------------------------
+# docker
+# ---------------------------------------------------------------------------
+
+def port_in_use(port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.3)
+    try:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+    finally:
+        s.close()
+
+
+def next_free_port(reg, avoid=None):
+    used = {e.get("port") for e in reg if e.get("port")}
+    avoid = avoid or set()
+    for p in range(SEED_PORT, SEED_PORT + PORT_SPAN):
+        if p in used or p in avoid:
+            continue
+        if not port_in_use(p):
+            return p
+    return None
+
+
+def ensure_image():
+    rc, _, _ = run(["docker", "image", "inspect", IMAGE], check=False)
+    if rc == 0:
+        return True
+    log("baue image %s" % IMAGE)
+    rc, _, _ = run(["docker", "build", "-t", IMAGE, GATEWAY_DIR], timeout=600, check=False)
+    return rc == 0
+
+
+def container_exists(name):
+    rc, _, _ = run(["docker", "inspect", name], check=False)
+    return rc == 0
+
+
+def container_running(name):
+    rc, out, _ = run(["docker", "inspect", "--format", "{{.State.Running}}", name], check=False)
+    if rc != 0:
+        return None
+    return out.strip() == "true"
+
+
+def container_env(name):
+    rc, out, _ = run(
+        ["docker", "inspect", "--format", "{{range .Config.Env}}{{.}}\n{{end}}", name],
+        check=False,
+    )
+    if rc != 0:
+        return {}
+    env = {}
+    for line in out.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            env[k] = v
+    return env
+
+
+def start_container(entry, raw_key):
+    name = entry["container"]
+    limit = entry.get("limit_override") or DAILY_LIMIT_DEFAULT
+    vol_cnt = os.path.join(DATA_ROOT, name)
+    vol_log = os.path.join(LOG_DIR, name)
+    os.makedirs(vol_cnt, exist_ok=True)
+    os.makedirs(vol_log, exist_ok=True)
+
+    cmd = [
+        "docker", "run", "-d", "--name", name,
+        "--add-host", "host.docker.internal:host-gateway",
+        "-p", "%d:80" % entry["port"],
+        "-v", "%s:/var/lib/fr-gateway-counter" % vol_cnt,
+        "-v", "%s:/var/log/nginx" % vol_log,
+        "--restart", "unless-stopped",
+        "--log-driver", "json-file",
+        "--log-opt", "max-size=10m",
+        "--log-opt", "max-file=3",
+        "-e", "UPSTREAM_URL=http://host.docker.internal:20128/v1",
+        "-e", "UPSTREAM_API_KEY=%s" % raw_key,
+        "-e", "DAILY_TOKEN_LIMIT=%d" % limit,
+        "-e", "RESET_TZ=UTC",
+        "-e", "CLIENT_API_KEY=%s" % entry.get("client_api_key", ""),
+        "-e", "MODEL_FAMILY=%s" % entry.get("model_family", "?"),
+        IMAGE,
+    ]
+    rc, out, err = run(cmd, timeout=180, check=False)
+    if rc != 0:
+        combined = (out + err).lower()
+        if "address already in use" in combined:
+            newport = next_free_port([], avoid={entry["port"]})
+            if newport is not None:
+                log("port %d belegt, nehme %d" % (entry["port"], newport), "warn")
+                entry["port"] = newport
+                return start_container(entry, raw_key)
+        return False
+    log("container %s gestartet auf :%d (family=%s)" % (
+        name, entry["port"], entry.get("model_family", "?")))
+    return True
+
+
+def recreate_container(entry, raw_key):
+    name = entry["container"]
+    run(["docker", "rm", "-f", name], check=False)
+    time.sleep(1)
+    return start_container(entry, raw_key)
+
+
+# ---------------------------------------------------------------------------
+# watch
+# ---------------------------------------------------------------------------
+
+def watch_once(reg, reaper=False):
+    changed = False
+    keys = read_keys()
+    hash_to_raw = {key_hash(k): k for k in keys}
+    pos_of = {key_hash(k): i + 1 for i, k in enumerate(keys)}
+    by_hash = {e["key_hash"]: e for e in reg}
+    m = load_map()
+
+    # neue keys -> container starten
+    for raw in keys:
+        h = key_hash(raw)
+        if h in by_hash:
+            continue
+        entry = {
+            "key_hash": h,
+            "port": None,
+            "container": container_name(raw),
+            "created": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "model_family": "astra" if pos_of[h] <= ASTRA_COUNT else "opus",
+            "limit_override": None,
+            "client_api_key": raw_to_unique(m, raw) or "",
+        }
+        p = next_free_port(reg)
+        if p is None:
+            log("kein freier port fuer %s" % h, "error")
+            continue
+        entry["port"] = p
+        if start_container(entry, raw):
+            reg.append(entry)
+            by_hash[h] = entry
+            changed = True
+        else:
+            log("start fehlgeschlagen: %s" % h, "error")
+
+    # bekannte keys -> wiederherstellen / env-diff -> recreate
+    for entry in reg:
+        h = entry["key_hash"]
+        raw = hash_to_raw.get(h)
+        if raw is None:
+            if reaper and container_exists(entry["container"]):
+                run(["docker", "rm", "-f", entry["container"]], check=False)
+                log("reaper: %s entfernt" % entry["container"])
+            continue
+
+        uniq = raw_to_unique(m, raw) or ""
+        need_recreate = False
+        if not container_exists(entry["container"]):
+            log("container fehlt, starte neu: %s" % entry["container"])
+            need_recreate = True
+        else:
+            env = container_env(entry["container"])
+            if env.get("CLIENT_API_KEY", "") != uniq:
+                log("client_api_key geaendert, recreate: %s" % entry["container"])
+                need_recreate = True
+
+        if need_recreate:
+            if entry.get("port") is None:
+                p = next_free_port(reg)
+                if p is None:
+                    continue
+                entry["port"] = p
+            entry["client_api_key"] = uniq
+            if recreate_container(entry, raw):
+                changed = True
+
+    if changed:
+        registry_save(reg)
+
+
+# ---------------------------------------------------------------------------
+# status
+# ---------------------------------------------------------------------------
+
+def read_usage(cont):
+    p = os.path.join(DATA_ROOT, cont, "counter.json")
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return int(d.get("tokens", 0))
+    except Exception:
+        return 0
+
+
+def cmd_status():
+    reg = registry_load()
+    keys = read_keys()
+    pos_of = {key_hash(k): i + 1 for i, k in enumerate(keys)}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    reset_iso = (now + datetime.timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+
+    rows = []
+    for e in sorted(reg, key=lambda x: pos_of.get(x["key_hash"], 10 ** 9)):
+        h = e["key_hash"]
+        cont = e.get("container", "-")
+        state = "?"
+        if container_exists(cont):
+            running = container_running(cont)
+            state = "running" if running else "stopped"
+        elif h not in pos_of:
+            state = "absent"
+        rows.append((
+            str(pos_of.get(h, "-")),
+            h[:16],
+            str(e.get("port", "-")),
+            cont,
+            state,
+            e.get("model_family", "?"),
+            str(read_usage(cont)),
+            str(e.get("limit_override") or DAILY_LIMIT_DEFAULT),
+            reset_iso,
+        ))
+
+    header = ("nr", "key-hash", "port", "container", "state", "family",
+              "tokens-heute", "limit", "reset-zeitpunkt")
+    widths = [max(len(header[i]), max((len(r[i]) for r in rows), default=0)) for i in range(len(header))]
+    fmt = " | ".join("{:<%d}" % w for w in widths)
+    print(fmt.format(*header))
+    print("-" * (sum(widths) + 3 * (len(header) - 1)))
+    for r in rows:
+        print(fmt.format(*r))
+    print()
+    total = sum(read_usage(e.get("container", "")) for e in reg)
+    print("eintraege=%d keys=%d tokens-heute-gesamt=%d" % (len(reg), len(keys), total))
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def main():
+    ap = argparse.ArgumentParser(prog="fr-manager")
+    ap.add_argument("--watch", action="store_true", help="watcher-schleife (30s)")
+    ap.add_argument("--status", action="store_true", help="status-tabelle drucken")
+    ap.add_argument("--reaper", action="store_true", help="fehlende keys entfernen")
+    args = ap.parse_args()
+
+    os.makedirs(BASE, exist_ok=True)
+    if not os.path.exists(KEYS_FILE):
+        if SEED_KEYS:
+            with open(KEYS_FILE, "w", encoding="utf-8") as f:
+                f.write("\n".join(SEED_KEYS) + "\n")
+            os.chmod(KEYS_FILE, 0o600)
+            log("keys_raw.txt angelegt (%d keys)" % len(SEED_KEYS))
+        else:
+            log(
+                "keys_raw.txt fehlt — bitte aus keys_raw.txt.example befuellen "
+                "(keine Seed-Keys im Binary)",
+                "error",
+            )
+            return 2
+    if not os.path.exists(REGISTRY_FILE):
+        registry_save([])
+        log("registry.json angelegt (leer)")
+
+    if args.status:
+        cmd_status()
+        return 0
+
+    if not ensure_image():
+        log("image build fehlgeschlagen", "error")
+        return 1
+
+    if args.watch:
+        log("fr-manager watch laeuft (interval=%ds)" % WATCH_INTERVAL)
+        while True:
+            try:
+                watch_once(registry_load(), args.reaper)
+            except Exception as e:
+                log("watch iteration fehler: %s" % e, "error")
+            time.sleep(WATCH_INTERVAL)
+
+    watch_once(registry_load(), args.reaper)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

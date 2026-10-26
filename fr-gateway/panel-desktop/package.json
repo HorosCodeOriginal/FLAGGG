@@ -1,0 +1,14 @@
+{
+  "name": "fr-gateway-panel-desktop",
+  "version": "1.0.0",
+  "description": "fr-gateway Panel als Desktop-App (Electron-Shell um das Web-Panel)",
+  "main": "main.js",
+  "author": "fr",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

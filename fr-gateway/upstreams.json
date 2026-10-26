@@ -1,0 +1,26 @@
+{
+  "_comment": "Geordneter Upstream-Pool fuer den Failover. Reihenfolge = Prioritaet. primary = echter Anbieter (aktuell 429), free-bridge = keyloses freies Modell ueber lokalen Brueckenkopf, local-light = Offline-Stub als letzte Stufe.",
+  "circuitBreaker": {
+    "failureStatuses": [401, 402, 403, 429, 500, 502, 503, 504],
+    "cooldownSeconds": 30
+  },
+  "upstreams": [
+    {
+      "name": "primary-router",
+      "url": "http://host.docker.internal:20128/v1",
+      "enabled": true
+    },
+    {
+      "name": "free-bridge",
+      "hint": "Lokaler Brueckenkopf zu einem keylosen freien Modell (tools/free-model-bridge.js)",
+      "url": "http://host.docker.internal:20201/v1",
+      "enabled": true
+    },
+    {
+      "name": "local-light",
+      "hint": "Lokaler Offline-Stub (tools/light-upstream.js) - letzte Stufe",
+      "url": "http://host.docker.internal:20200/v1",
+      "enabled": true
+    }
+  ]
+}

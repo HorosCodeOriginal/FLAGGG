@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fr-gateway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0a0f; --fg:#c8c8d0; --accent:#4f8cff; --secondary:#a855f7;
+    --success:#22c55e; --danger:#ef4444; --warning:#f59e0b;
+    --card:#12121a; --border:#1e1e2e; --dim:#6b6b78;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body {
+    background:var(--bg); color:var(--fg);
+    font-family:'JetBrains Mono','Fira Code',monospace; font-size:13px;
+    padding-top:48px; padding-bottom:32px; overflow-y:scroll;
+  }
+  .header {
+    position:fixed; top:0; left:0; right:0; height:48px; z-index:50;
+    display:flex; align-items:center; gap:16px; padding:0 16px;
+    background:rgba(10,10,15,.92); border-bottom:1px solid var(--border);
+    backdrop-filter:blur(6px);
+  }
+  .brand { color:var(--accent); font-weight:700; font-size:15px; letter-spacing:.5px; }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--success); }
+  .dot.err { background:var(--danger); }
+  .dot.warn { background:var(--warning); }
+  .stats-mid { flex:1; text-align:center; color:var(--dim); font-size:12px; }
+  .stats-mid b { color:var(--fg); font-weight:600; }
+  .uptime { color:var(--dim); font-size:12px; }
+
+  .actionbar {
+    display:flex; gap:8px; align-items:center; padding:8px 16px;
+    border-bottom:1px solid var(--border); background:var(--card);
+  }
+  textarea#addKeys {
+    flex:1; min-height:34px; max-height:120px; resize:vertical;
+    background:var(--bg); color:var(--fg); border:1px solid var(--border);
+    border-radius:4px; padding:8px; font:inherit; font-size:12px;
+  }
+  textarea#addKeys:focus { outline:none; border-color:var(--accent); }
+  button {
+    background:var(--card); color:var(--fg); border:1px solid var(--border);
+    border-radius:4px; padding:8px 14px; font:inherit; cursor:pointer;
+    transition:background .15s, border-color .15s;
+  }
+  button:hover { border-color:var(--accent); }
+  #btnAdd { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  #btnAdd:hover { filter:brightness(1.1); }
+
+  .grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:8px; padding:12px 16px;
+  }
+  .card {
+    background:var(--card); border:1px solid var(--border); border-radius:6px;
+    padding:10px; cursor:pointer; will-change:transform;
+    transition:border-color .15s, transform .1s;
+  }
+  .card:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .card-name { color:var(--dim); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card-state { width:6px; height:6px; border-radius:50%; background:var(--success); flex-shrink:0; }
+  .card-state.stopped,.card-state.removed { background:var(--danger); }
+  .card-state.absent { background:var(--dim); }
+  .card-mid { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+  .port { font-size:24px; font-weight:700; color:var(--accent); }
+  .port.opus { color:var(--secondary); }
+  .badge {
+    font-size:10px; padding:2px 6px; border-radius:3px; font-weight:600;
+    background:rgba(79,140,255,.15); color:var(--accent);
+  }
+  .badge.opus { background:rgba(168,85,247,.15); color:var(--secondary); }
+  .bar { height:4px; background:var(--border); border-radius:2px; overflow:hidden; margin-bottom:6px; }
+  .bar-fill { height:100%; background:var(--accent); width:0%; transition:width .4s; }
+  .bar-fill.opus { background:var(--secondary); }
+  .bar-fill.warn { background:var(--warning); }
+  .bar-fill.full { background:var(--danger); }
+  .card-bottom { display:flex; justify-content:space-between; color:var(--dim); font-size:11px; }
+
+  .overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(4px);
+    display:none; align-items:center; justify-content:center; z-index:100;
+  }
+  .overlay.open { display:flex; }
+  .modal {
+    background:var(--card); border:1px solid var(--border); border-radius:8px;
+    width:min(600px,92vw); max-height:88vh; overflow-y:auto; padding:20px;
+  }
+  .modal h2 { font-size:14px; margin-bottom:14px; color:var(--fg); }
+  .field { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .field .k { color:var(--dim); }
+  .field .v { color:var(--fg); word-break:break-all; text-align:right; max-width:70%; }
+  .field input[type=text] {
+    background:var(--bg); color:var(--fg); border:1px solid var(--border);
+    border-radius:4px; padding:4px 8px; font:inherit; width:140px;
+  }
+  .modal-actions { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+  #btnRevoke { background:var(--danger); border-color:var(--danger); color:#fff; }
+  #btnResetLimit { border-color:var(--border); }
+  #btnLogs { border-color:var(--border); }
+  .logs-area { display:none; margin-top:12px; }
+  .logs-area.open { display:block; }
+  .logs-area pre {
+    background:var(--bg); border:1px solid var(--border); border-radius:4px;
+    padding:8px; font-size:11px; max-height:240px; overflow:auto; white-space:pre-wrap;
+  }
+  #uniqVal { cursor:pointer; }
+
+  .footer {
+    position:fixed; bottom:0; left:0; right:0; height:32px; z-index:50;
+    display:flex; align-items:center; justify-content:center; gap:16px;
+    background:rgba(10,10,15,.92); border-top:1px solid var(--border);
+    color:var(--dim); font-size:11px;
+  }
+  #wsState { color:var(--success); }
+
+  .toasts { position:fixed; right:12px; bottom:40px; z-index:200; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--card); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:4px; padding:10px 14px; font-size:12px; max-width:320px;
+    box-shadow:0 4px 20px rgba(0,0,0,.4); animation:slidein .25s ease;
+  }
+  .toast.err { border-left-color:var(--danger); }
+  @keyframes slidein { from { transform:translateX(30px); opacity:0; } to { transform:none; opacity:1; } }
+
+  @media (max-width:600px) {
+    .grid { grid-template-columns:1fr; }
+    .actionbar { flex-direction:column; }
+    textarea#addKeys { width:100%; }
+    .stats-mid { font-size:10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="brand">fr-gateway</span>
+  <span class="dot" id="headDot"></span>
+  <span class="stats-mid" id="midStats">—</span>
+  <span class="uptime" id="upTime">aktiv —</span>
+</div>
+
+<div class="actionbar">
+  <textarea id="addKeys" placeholder="sk-xxx... sk-yyy... (einer pro zeile)"></textarea>
+  <button id="btnAdd">SCHLÜSSEL HINZUFÜGEN</button>
+  <button id="btnRefresh">AKTUALISIEREN</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal">
+    <h2 id="mTitle">—</h2>
+    <div class="field"><span class="k">Nr.</span><span class="v" id="mNr"></span></div>
+    <div class="field"><span class="k">Port</span><span class="v" id="mPort"></span></div>
+    <div class="field"><span class="k">Modell</span><span class="v" id="mFamily"></span></div>
+    <div class="field"><span class="k">API-Key</span><span class="v" id="uniqVal" title="Klick zum Umschalten">—</span></div>
+    <div class="field"><span class="k">Limit</span><span class="v"><input type="text" id="mLimit" placeholder="2000000"></span></div>
+    <div class="field"><span class="k">Tokens heute</span><span class="v" id="mTokens"></span></div>
+    <div class="field"><span class="k">Reset</span><span class="v" id="mReset"></span></div>
+    <div class="modal-actions">
+      <button id="btnSetLimit">LIMIT SETZEN</button>
+      <button id="btnResetLimit">LIMIT ZURÜCKSETZEN</button>
+      <button id="btnLogs">LOGS ANZEIGEN</button>
+      <button id="btnRevoke">WIDERRUFEN</button>
+      <button id="btnClose">SCHLIESSEN</button>
+    </div>
+    <div class="logs-area" id="logsArea"><pre id="logsPre"></pre></div>
+  </div>
+</div>
+
+<div class="footer">
+  <span id="lastUpdate">zuletzt aktualisiert: —</span>
+  <span>ws: <span id="wsState">verbinde …</span></span>
+  <span>Aktualisierungsintervall: 3s</span>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let fleet = [];
+let stats = { active:0, astra:0, opus:0, total_tokens_today:0, uptime_seconds:0 };
+let selected = null;
+
+const STATE_LABEL = { running:'läuft', stopped:'gestoppt', absent:'fehlt', removed:'entfernt' };
+
+function fmtInt(n) { return (n||0).toLocaleString('de-DE'); }
+function fmtTokens(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n||0);
+}
+function fmtUptime(s) {
+  if (!s) return 'aktiv —';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+  return `aktiv ${h}h ${m}m`;
+}
+function toast(msg, err) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : '');
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+  while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
+}
+
+function renderHeader() {
+  $('midStats').innerHTML =
+    `<b>${stats.active}</b> aktiv · <b>${stats.astra}</b> astra · <b>${stats.opus}</b> opus · <b>${fmtTokens(stats.total_tokens_today)}</b> Tokens heute`;
+  $('upTime').textContent = fmtUptime(stats.uptime_seconds);
+  const dot = $('headDot');
+  dot.className = 'dot';
+  if (stats.active === 0) dot.classList.add('err');
+  else if (stats.active < stats.total_containers) dot.classList.add('warn');
+  $('lastUpdate').textContent = 'zuletzt aktualisiert: ' + new Date().toLocaleTimeString('de-DE');
+}
+
+function cardHTML(c) {
+  const ratio = c.limit ? Math.min(1, c.tokens / c.limit) : 0;
+  let fillCls = c.family === 'opus' ? 'opus' : '';
+  if (c.state !== 'running') fillCls = 'full';
+  else if (ratio >= 1) fillCls = 'full';
+  else if (ratio > 0.8) fillCls = 'warn';
+  const stateCls = ['running'].includes(c.state) ? '' : (c.state === 'absent' ? 'absent' : 'stopped');
+  return `
+  <div class="card" data-port="${c.port}" onclick="openDetail(${c.port})">
+    <div class="card-top">
+      <span class="card-name">${c.container}</span>
+      <span class="card-state ${stateCls}"></span>
+    </div>
+    <div class="card-mid">
+      <span class="port ${c.family === 'opus' ? 'opus' : ''}">${c.port}</span>
+      <span class="badge ${c.family === 'opus' ? 'opus' : ''}">${c.family.toUpperCase()}</span>
+    </div>
+    <div class="bar"><div class="bar-fill ${fillCls}" style="width:${(ratio*100).toFixed(1)}%"></div></div>
+    <div class="card-bottom">
+      <span>${fmtTokens(c.tokens)} / ${fmtTokens(c.limit)}</span>
+      <span>${c.reset_at ? c.reset_at.slice(5,16).replace('T',' ') : ''}</span>
+    </div>
+  </div>`;
+}
+
+function renderGrid() {
+  $('grid').innerHTML = fleet.map(cardHTML).join('');
+}
+
+function renderStats() { renderHeader(); renderGrid(); }
+
+let uniqShown = false;
+function openDetail(port) {
+  const c = fleet.find(x => x.port === port);
+  if (!c) return;
+  selected = c; uniqShown = false;
+  $('mTitle').textContent = `${c.container} · ${STATE_LABEL[c.state] || c.state}`;
+  $('mNr').textContent = c.nr;
+  $('mPort').textContent = c.port;
+  $('mFamily').textContent = c.family;
+  $('uniqVal').textContent = '••••••••';
+  $('mLimit').value = c.limit;
+  $('mTokens').textContent = fmtInt(c.tokens);
+  $('mReset').textContent = c.reset_at;
+  $('logsArea').classList.remove('open');
+  $('overlay').classList.add('open');
+}
+
+function closeDetail() { $('overlay').classList.remove('open'); selected = null; }
+$('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeDetail(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+$('btnClose').onclick = closeDetail;
+
+$('uniqVal').onclick = function() {
+  if (!selected) return;
+  uniqShown = !uniqShown;
+  this.textContent = uniqShown ? (selected.unique_key || '(leer)') : '••••••••';
+};
+
+async function api(path, opts) {
+  const r = await fetch(path, { headers:{ 'Content-Type':'application/json' }, ...opts });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+$('btnAdd').onclick = async () => {
+  const keys = $('addKeys').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if (!keys.length) return;
+  try {
+    const j = await api('/api/keys/add', { method:'POST', body:JSON.stringify({ keys }) });
+    toast(`${j.added} Schlüssel hinzugefügt, Ports ${j.ports.join(', ')}`);
+    $('addKeys').value = '';
+  } catch (e) { toast('Hinzufügen fehlgeschlagen: ' + e.message, true); }
+};
+
+$('btnSetLimit').onclick = async () => {
+  if (!selected) return;
+  const lim = parseInt($('mLimit').value, 10);
+  if (!lim || lim <= 0) return;
+  try {
+    const j = await api('/api/limit/set', { method:'POST', body:JSON.stringify({ port:selected.port, limit:lim }) });
+    toast(`Limit Port ${j.port}: ${fmtInt(j.old_limit)} → ${fmtInt(j.new_limit)}`);
+  } catch (e) { toast('Limit fehlgeschlagen: ' + e.message, true); }
+};
+
+$('btnResetLimit').onclick = async () => {
+  if (!selected) return;
+  try {
+    const j = await api('/api/limit/reset', { method:'POST', body:JSON.stringify({ key_hash:selected.container.replace('fr-key-','') }) });
+    toast('Zähler zurückgesetzt: ' + j.reset);
+  } catch (e) { toast('Zurücksetzen fehlgeschlagen: ' + e.message, true); }
+};
+
+$('btnRevoke').onclick = async () => {
+  if (!selected || !confirm(`WIDERRUFEN ${selected.container}?`)) return;
+  try {
+    const j = await api('/api/keys/revoke', { method:'POST', body:JSON.stringify({ key_hash:selected.container.replace('fr-key-','') }) });
+    toast('widerrufen: ' + j.container);
+    closeDetail();
+  } catch (e) { toast('Widerruf fehlgeschlagen: ' + e.message, true); }
+};
+
+$('btnLogs').onclick = async () => {
+  if (!selected) return;
+  const area = $('logsArea'), pre = $('logsPre');
+  try {
+    const r = await fetch(`/logs/${selected.container}`);
+    const j = await r.json();
+    pre.textContent = (j.lines || []).join('\n') || '(leer)';
+    area.classList.add('open');
+  } catch (e) { pre.textContent = 'Logs nicht verfügbar'; area.classList.add('open'); }
+};
+
+$('btnRefresh').onclick = async () => {
+  try {
+    fleet = await api('/api/fleet');
+    stats = await api('/api/stats');
+    renderStats();
+  } catch (e) { toast('Aktualisierung fehlgeschlagen: ' + e.message, true); }
+};
+
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => { $('wsState').textContent = 'verbunden'; $('wsState').style.color = 'var(--success)'; };
+  ws.onmessage = ev => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'fleet') { fleet = msg.data; stats = msg.stats; renderStats(); }
+    } catch (e) {}
+  };
+  ws.onclose = () => {
+    $('wsState').textContent = 'getrennt';
+    $('wsState').style.color = 'var(--danger)';
+    setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+connectWS();
+renderStats();
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fr-harness — Übersicht</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+<div class="header">
+  <span class="brand">fr-harness</span>
+  <span class="dot" id="headDot"></span>
+  <span class="stats-mid" id="midStats">—</span>
+  <span class="uptime" id="upTime">online —</span>
+</div>
+
+<div class="actionbar">
+  <input type="text" id="search" placeholder="Filter: Nr. / Port / Name…">
+  <div class="filters">
+    <button class="filter on" data-f="alle">ALLE</button>
+    <button class="filter" data-f="astra">ASTRA</button>
+    <button class="filter" data-f="opus">OPUS</button>
+  </div>
+  <button id="btnStudio">HARNESS PRO</button>
+  <button id="btnRefresh">AKTUALISIEREN</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="footer">
+  <span id="lastUpdate">letzte Aktualisierung: —</span>
+  <span>Fleet-Aktualisierung: 5s</span>
+  <span id="srcInfo">Quelle: —</span>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

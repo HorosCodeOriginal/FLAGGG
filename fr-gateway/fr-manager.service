@@ -1,0 +1,16 @@
+[Unit]
+Description=FR gateway manager (watcher)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/opt/fr-gateway/bin/fr-manager --watch
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/fr-gateway/manager.log
+StandardError=append:/var/log/fr-gateway/manager.log
+
+[Install]
+WantedBy=multi-user.target

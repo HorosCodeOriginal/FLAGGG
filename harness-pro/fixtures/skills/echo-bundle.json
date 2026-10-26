@@ -1,0 +1,14 @@
+{
+  "id": "echo-helpers",
+  "name": "Echo Helpers",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "description": "Fixture skill for install_skill tests",
+  "tools": [
+    { "name": "echo_upper", "description": "Uppercase a string" }
+  ],
+  "permissions": ["workspace_read", "workspace_write"],
+  "files": {
+    "index.js": "module.exports = { tools: { echo_upper: function (args, ctx) { var t = String((args && args.text) || ''); ctx.writeFile('echo-out.txt', t.toUpperCase()); return { text: t.toUpperCase() }; } } };"
+  }
+}

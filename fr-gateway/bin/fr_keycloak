@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+import argparse, base64, hashlib, hmac, json, os, secrets, sys
+
+DOMAIN = b"fkl/key/"          # domain separator, trennt keycloak-hmac klar von anderen nutzern
+
+def derive(secret: bytes, raw: str) -> str:
+    d = hmac.new(secret, DOMAIN + raw.encode(), hashlib.sha256).digest()
+    return "vkd-" + base64.urlsafe_b64encode(d).rstrip(b'=').decode('ascii')
+
+def load_secret(path: str) -> bytes:
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            return f.read(32)
+    s = secrets.token_bytes(32)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # nur owner-read
+    with os.fdopen(fd, 'wb') as f:
+        f.write(s)
+    return s
+
+def main():
+    a = argparse.ArgumentParser()
+    a.add_argument('-i', '--input', default='/opt/fr-gateway/keys_raw.txt')
+    a.add_argument('--outdir',    default='/opt/fr-gateway')
+    a.add_argument('--secret',    default='/opt/fr-gateway/.secret')
+    a.add_argument('--show-secret', action='store_true')
+    a.add_argument('--tokens',    action='store_true', help='nur unique-keys auf stdout, keine dateien')
+    args = a.parse_args()
+
+    sec = load_secret(args.secret)
+    if args.show_secret:
+        print("secret(hex):", sec.hex(), file=sys.stderr)
+
+    if not os.path.exists(args.input):
+        print("keine input-datei:", args.input, file=sys.stderr); return 1
+
+    seen = {}
+    out, toks = {}, []
+    with open(args.input, 'r', encoding='utf-8') as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln and not ln.startswith('#'):
+                if ln in seen:
+                    print("duplikat(raw):", ln, file=sys.stderr); return 2
+                seen[ln] = True
+                t = derive(sec, ln)
+                if t in out:
+                    print("kollision(unique):", t, file=sys.stderr); return 2
+                out[t] = ln
+                toks.append(t)
+
+    if args.tokens:
+        print('\n'.join(toks))
+        return 0
+
+    os.makedirs(args.outdir, exist_ok=True)
+    tu = os.path.join(args.outdir, 'keys_unique.txt')
+    tm = os.path.join(args.outdir, 'keys.map.json')
+    with open(tu, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(toks) + '\n')
+    with open(tm, 'w', encoding='utf-8') as f:
+        json.dump(out, f, indent=2)
+
+    print(f"keys(raw)={len(toks)} unique-keys={len(toks)} kollisionen=0")
+    print("files:", tu, tm, "| secret:", args.secret)
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

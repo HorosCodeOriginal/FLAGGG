@@ -1,0 +1,4 @@
+# One upstream API key per line (no quotes).
+# Copy to secrets/keys_raw.txt and fill in real keys — never commit secrets/.
+sk-example-key-replace-me-001
+sk-example-key-replace-me-002

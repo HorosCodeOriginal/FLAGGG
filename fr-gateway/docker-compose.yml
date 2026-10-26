@@ -1,0 +1,63 @@
+name: fr-gateway
+
+services:
+  manager:
+    build: ./manager
+    container_name: fr-manager
+    restart: unless-stopped
+    command: watch
+    volumes:
+      - ./secrets/keys_raw.txt:/app/keys_raw.txt:ro
+      - ./upstreams.json:/app/upstreams.json:ro
+      - ./secrets:/app/secrets
+      - ./logs/manager:/var/log/fr-gateway
+      - ./logs/gateways:/var/log/gateways
+      - ./data:/var/lib/gateways
+      - ./gateway:/app/gateway:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      REGISTRY_FILE: /app/secrets/registry.json
+      KEYS_FILE: /app/keys_raw.txt
+      SECRETS_DIR: /app/secrets
+      PORT_START: "20129"
+      DEFAULT_LIMIT: "2000000"
+      RESET_TZ: UTC
+      WATCH_INTERVAL: "30"
+      UPSTREAM_URL: http://host.docker.internal:20128/v1
+      UPSTREAMS_FILE: /app/upstreams.json
+      NETWORK_NAME: fr-gateway_default
+      GATEWAY_IMAGE: fr-gateway:2026-10-25
+      GATEWAY_BUILD_CONTEXT: /app/gateway
+      DATA_ROOT: /var/lib/gateways
+      LOG_ROOT: /var/log/gateways
+
+  panel:
+    build: ./panel
+    container_name: fr-panel
+    restart: unless-stopped
+    depends_on:
+      - manager
+    ports:
+      # Panel nur lokal: Host-Bind auf loopback. (Container-intern bleibt
+      # uvicorn auf 0.0.0.0, sonst waere der Host-Zugriff technisch tot.)
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./secrets/keys_raw.txt:/app/keys_raw.txt:ro
+      - ./upstreams.json:/app/upstreams.json:ro
+      - ./secrets:/app/secrets
+      - ./logs/gateways:/app/logs/gateways
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      REGISTRY_FILE: /app/secrets/registry.json
+      KEYS_FILE: /app/keys_raw.txt
+      UPSTREAMS_FILE: /app/upstreams.json
+      PANEL_TOKEN: "${PANEL_TOKEN:-}"
+      PANEL_ORIGINS: "http://127.0.0.1:8090,http://localhost:8090"
+      SECRETS_DIR: /app/secrets
+      PORT_START: "20129"
+      DEFAULT_LIMIT: "2000000"
+      NETWORK_NAME: fr-gateway_default
+      GATEWAY_IMAGE: fr-gateway:2026-10-25
+      DATA_ROOT: /app/data
+      LOG_ROOT: /app/logs/gateways

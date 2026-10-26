@@ -1,0 +1,15 @@
+[
+  {
+    "container": "fr-key-example",
+    "created": "2026-01-01T00:00:00+00:00",
+    "key_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "limit_override": null,
+    "model_family": "astra",
+    "nr": 1,
+    "port": 20129,
+    "raw_key": "sk-example-key-replace-me-001",
+    "state": "running",
+    "unique_key": "vkd-example-unique-key-replace-me",
+    "upstreams_hash": "0000000000000000"
+  }
+]

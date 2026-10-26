@@ -1,0 +1,4686 @@
+diff --git a/.github/workflows/harness-pro.yml b/.github/workflows/harness-pro.yml
+new file mode 100644
+index 0000000..8cb4c9d
+--- /dev/null
++++ b/.github/workflows/harness-pro.yml
+@@ -0,0 +1,45 @@
++name: harness-pro tests
++
++on:
++  push:
++    paths:
++      - 'harness-pro/**'
++      - '.github/workflows/harness-pro.yml'
++  pull_request:
++    paths:
++      - 'harness-pro/**'
++      - '.github/workflows/harness-pro.yml'
++
++jobs:
++  test:
++    runs-on: ubuntu-latest
++    defaults:
++      run:
++        working-directory: harness-pro
++    steps:
++      - uses: actions/checkout@v4
++
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '20'
++          cache: npm
++          cache-dependency-path: harness-pro/package-lock.json
++
++      - name: Install Electron system libraries
++        run: |
++          sudo apt-get update
++          sudo apt-get install -y --no-install-recommends \
++            libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 \
++            xdg-utils libatspi2.0-0 libuuid1 libsecret-1-0 \
++            libasound2 xvfb
++
++      - name: npm ci
++        run: npm ci
++
++      - name: Rebuild better-sqlite3 for Electron
++        run: npx electron-rebuild -f -w better-sqlite3
++
++      - name: Run tests (Electron as Node)
++        run: npm test
++        env:
++          ELECTRON_RUN_AS_NODE: '1'
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..925c1fd
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,63 @@
++# Dependencies & builds
++**/node_modules/
++**/dist/
++**/out/
++**/.cache/
++**/build/
++*.exe
++*.dmg
++*.AppImage
++*.blockmap
++*.snap
++
++# Secrets & Keys
++fr-gateway/keys_raw.txt
++fr-gateway/secrets/
++**/.env
++**/*.env
++**/*.key
++**/*.pem
++**/astra-key.txt
++**/credentials.json
++**/credentials.txt
++
++# Runtime-Daten
++**/data/
++**/logs/
++**/workspaces/
++**/testrun/
++**/envs/
++
++# Harness local artifacts
++harness-pro/_*_ids.json
++
++# Patches & Diffs (geh├Âren nicht ins Repo)
++*.diff
++*.patch
++*.orig
++*.bak
++*.bak-*
++**/*.bak-*
++
++# Audit / local notes
++.audit/
++.Log/
++
++# Python / panel junk
++**/__pycache__/
++**/*.pyc
++**/*.pyo
++
++# OS / IDE
++.DS_Store
++Thumbs.db
++.vscode/
++.idea/
++
++# Test / temp
++coverage/
++.nyc_output/
++tmp/
++temp/
++*.log
++**/ui-test-result.txt
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..4d712a4
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,106 @@
++# FLAGGG ÔÇö Distributed Multi-Agent System
++
++Lokale, autonome Multi-Agenten-Firma: isolierte Gateway-Endpunkte (Docker) und ein Electron-Cockpit mit Task-Queue, Graph-Routing und Self-Healing.
++
++## Architektur
++
++```mermaid
++flowchart TB
++  subgraph gateway [fr-gateway]
++    Manager[manager_watch]
++    Panel[panel_8090]
++    GW1[OpenResty_key_1]
++    GW2[OpenResty_key_N]
++    Manager --> GW1
++    Manager --> GW2
++    Panel --> Manager
++    GW1 --> Upstream[FlagshipRouter_Upstream]
++    GW2 --> Upstream
++  end
++
++  subgraph harness [harness-pro_Electron]
++    UI[Canvas_UI]
++    Main[main.js]
++    Orch[Orchestrator]
++    TQ[TaskQueue_SQLite_FSM]
++    RT[AgentRuntimes]
++    TR[ToolRunner]
++    UI --> Main
++    Main --> Orch
++    Orch --> RT
++    Orch --> TQ
++    RT --> TQ
++    RT --> TR
++    Main --> GW1
++  end
++```
++
++**fr-gateway:** Docker Compose startet Manager + Panel und bis zu ~46 isolierte OpenResty-Container (ein Token/Port). Token-Limits, Failover-Kette, Upstream-Pool.
++
++**harness-pro:** Electron-Desktop. SQLite-Task-Queue, Rollen-Graph, parallele Runtimes (Semaphore), ToolRunner, Synthesizer, Live-Canvas.
++
++## Features
++
++- **Task-Queue + FSM:** `queued ÔåÆ claimed ÔåÆ running ÔåÆ waiting_on_child ÔåÆ done/failed` (strikt)
++- **Graph-Routing:** `superiors` / `subordinates` / `peers` ÔÇö Policy steuert, wer an wen Tasks senden darf
++- **Self-Healing-Loop:** Sub-Fehler (`stderr`) ÔåÆ `error_history` ÔåÆ Boss liest Fehler ÔåÆ Fix-Task ÔåÆ Sub heilt (z.ÔÇ»B. `pip install`) und wiederholt
++- **ToolRunner:** `read_file`, `write_file`, `execute_shell`, `web_search`, `web_fetch`, `download_file`, plus `install_skill` (Plugin-Sandbox)
++- **Synthesizer:** Kind-Ergebnisse ÔåÆ kompakter Report (Attention Economy)
++
++## Setup
++
++### 1. Secrets (nie committen)
++
++```bash
++cd fr-gateway
++cp keys_raw.txt.example secrets/keys_raw.txt
++# echte Upstream-Keys eintragen (eine Zeile pro Key)
++
++cp registry.example.json secrets/registry.json
++# Ports / unique_key / model_family anpassen
++```
++
++Secrets nur ├╝ber lokale Dateien unter `fr-gateway/secrets/` (gitignored), `.env` oder Docker-Secrets ÔÇö **niemals** im Repo.
++
++### 2. Gateway starten
++
++```bash
++cd fr-gateway
++docker compose up -d --build
++```
++
++Panel: http://127.0.0.1:8090
++
++### 3. Astra Harness
++
++```bash
++cd harness-pro
++npm install
++npm test
++npm run seed-goal   # optional: Demo-Goal in die Queue
++npm start
++```
++
++Optional: `harness-pro/data/astra-key.txt` mit dem Gateway-Token (Pfad liegt unter `**/data/` und ist gitignored).
++
++## Tests / CI
++
++```bash
++cd harness-pro && npm test
++```
++
++GitHub Actions: `.github/workflows/harness-pro.yml`
++
++## Security-Hinweis
++
++- `fr-gateway/secrets/`, `keys_raw.txt`, `**/data/`, `**/logs/`, `**/workspaces/` sind in `.gitignore`.
++- Rohe `sk-ÔÇª` / `vkd-ÔÇª` Keys geh├Âren nicht in Git, Diffs oder Issues.
++- Agent-`execute_shell` l├ñuft im Workspace ÔÇö nur in vertrauensw├╝rdiger lokaler Umgebung nutzen.
++
++## Legacy
++
++`astra-harness/`, `claude-harness/`, `fr-harness/` sind ├ñltere Kopien und nicht Teil der CI.
++
++## Lizenz
++
++MIT (Harness). Upstream-Zugang und Keys bleiben privat.
+diff --git a/check-app-health.ps1 b/check-app-health.ps1
+new file mode 100644
+index 0000000..6ef6fdc
+--- /dev/null
++++ b/check-app-health.ps1
+@@ -0,0 +1,111 @@
++# ============================================================================
++#  check-app-health.ps1 ÔÇö READ-ONLY Gesundheitscheck der Harness-Kette
++#  App (Electron) -> fr-gateway (Docker, pro Key) -> FlagshipRouter :20128 -> Provider
++#
++#  Aufruf:  .\check-app-health.ps1
++#  Es wird NICHTS ver├ñndert (keine Neustarts, keine Schreibzugriffe).
++# ============================================================================
++$ErrorActionPreference = 'Continue'
++$ROOT = $PSScriptRoot; if (-not $ROOT) { $ROOT = (Get-Location).Path }
++$REG = Join-Path $ROOT 'fr-gateway\secrets\registry.json'
++$UPSTREAM = 'http://127.0.0.1:20128/v1'
++$PANEL = 'http://127.0.0.1:8090'
++
++function Line($t) { Write-Host $t }
++function Ok($t)   { Write-Host "  [OK]   $t" -ForegroundColor Green }
++function Bad($t)  { Write-Host "  [FEHL] $t" -ForegroundColor Red }
++function Info($t) { Write-Host "  [info] $t" -ForegroundColor DarkGray }
++
++Line ''
++Line '=== 1) Docker / Gateway-Container ==='
++try {
++    $running = (docker ps --filter 'name=fr-key-' --format '{{.Names}}' 2>$null | Measure-Object -Line).Lines
++    $unhealthy = (docker ps --filter 'name=fr-key-' --filter 'health=unhealthy' --format '{{.Names}}' 2>$null | Measure-Object -Line).Lines
++    if ($running -gt 0) { Ok "$running Key-Container laufen, $unhealthy unhealthy" } else { Bad 'keine Key-Container aktiv' }
++} catch { Bad "docker nicht erreichbar: $($_.Exception.Message)" }
++
++Line ''
++Line '=== 2) Panel (fr-panel :8090) ==='
++try {
++    $fleet = Invoke-RestMethod -Uri "$PANEL/api/fleet" -TimeoutSec 10
++    Ok "Panel antwortet, Fleet-Eintr├ñge: $($fleet.Count)"
++} catch { Bad "Panel: $($_.Exception.Message)" }
++
++Line ''
++Line '=== 3) Registry / Key-Auth (Stichprobe 3) ==='
++$entries = @()
++try {
++    $entries = Get-Content $REG -Raw | ConvertFrom-Json
++    Ok "Registry lesbar, $($entries.Count) Eintr├ñge"
++} catch { Bad "Registry nicht lesbar: $($_.Exception.Message)" }
++$authOk = 0; $authBad = 0
++foreach ($e in ($entries | Select-Object -First 3)) {
++    try {
++        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($e.port)/v1/models" -Headers @{ Authorization = "Bearer $($e.unique_key)" } -UseBasicParsing -TimeoutSec 8
++        if ($r.StatusCode -eq 200) { $authOk++ } else { $authBad++ }
++    } catch { $authBad++ }
++}
++if ($authOk -gt 0 -and $authBad -eq 0) { Ok "Key-Auth + /v1/models: $authOk/3 OK" } else { Bad "Key-Auth: $authOk OK, $authBad Fehler" }
++
++# Upstream-Key nur aus Env oder erster Zeile von secrets/keys_raw.txt (nie hardcoden)
++$UPSTREAM_KEY = $env:FLAGGG_UPSTREAM_KEY
++if (-not $UPSTREAM_KEY) {
++    $keysFile = Join-Path $ROOT 'fr-gateway\secrets\keys_raw.txt'
++    if (Test-Path $keysFile) {
++        $UPSTREAM_KEY = (Get-Content $keysFile -ErrorAction SilentlyContinue |
++            Where-Object { $_ -and $_ -notmatch '^\s*#' } |
++            Select-Object -First 1)
++    }
++}
++
++Line ''
++Line '=== 4) Upstream-Router (:20128) ==='
++if (-not $UPSTREAM_KEY) {
++    Bad 'kein Upstream-Key (FLAGGG_UPSTREAM_KEY oder fr-gateway/secrets/keys_raw.txt)'
++    $ids = @()
++} else {
++try {
++    $models = Invoke-RestMethod -Uri "$UPSTREAM/models" -Headers @{ Authorization = "Bearer $UPSTREAM_KEY" } -TimeoutSec 15
++    $ids = @($models.data | ForEach-Object { $_.id })
++    Ok "Router erreichbar, $($ids.Count) Modelle"
++    Info ($ids -join ', ')
++} catch { Bad "Router: $($_.Exception.Message)"; $ids = @() }
++}
++
++Line ''
++Line '=== 5) Chat-Probe (1 Modell, 8 Tokens) ==='
++if ($ids.Count -gt 0 -and $UPSTREAM_KEY) {
++    $probe = 'gpt-6-astra'
++    if ($ids -notcontains $probe) { $probe = $ids[0] }
++    $body = @{ model = $probe; messages = @(@{ role = 'user'; content = 'ping' }); stream = $false; max_tokens = 8 } | ConvertTo-Json -Depth 5
++    try {
++        $r = Invoke-WebRequest -Uri "$UPSTREAM/chat/completions" -Method Post -Body $body -ContentType 'application/json' -Headers @{ Authorization = "Bearer $UPSTREAM_KEY" } -UseBasicParsing -TimeoutSec 60
++        Ok "Chat funktioniert (HTTP $($r.StatusCode), Modell $probe)"
++    } catch {
++        $resp = $_.Exception.Response
++        $code = if ($resp) { $resp.StatusCode.value__ } else { 'ERR' }
++        $msg = [string]$_.ErrorDetails.Message
++        if (-not $msg) { $msg = $_.Exception.Message }
++        $msg = ($msg -replace '\\u0022', '"') -replace '\s+', ' '
++        Bad "Chat fehlgeschlagen: HTTP $code"
++        Info $msg.Substring(0, [Math]::Min(240, $msg.Length))
++        Line ''
++        Line '  Einordnung:'
++        if ($msg -match 'FreeUsageLimitError|Free usage limit') {
++            Info '  -> Upstream-Provider (OpenCode) hat das kostenlose Kontingent aufgebraucht.'
++            Info '     Ursache liegt NICHT in der App und NICHT im fr-gateway.'
++        } elseif ($msg -match 'daily token limit') {
++            Info '  -> fr-gateway Tageslimit (2 Mio. Tokens) erreicht.'
++        } elseif ($msg -match 'ModelDeprecated|Unsupported model|Model is unavailable|not available in') {
++            Info '  -> Modell/Provider beim Upstream nicht verf├╝gbar oder abgek├╝ndigt.'
++        } elseif ($msg -match 'unauthorized|invalid_api_key') {
++            Info '  -> Zugangsdaten/Key ung├╝ltig.'
++        }
++    }
++}
++
++Line ''
++Line '=== 6) Fazit ==='
++Line '  App-Kette (Electron/Fenster, Panel, Gateway-Container, Key-Auth, /v1/models)'
++Line '  = oben gr├╝n. Reicht die Chat-Probe Rot, liegt der Fehler beim Upstream-Provider.'
++Line ''
+diff --git a/docs/audit-mas.md b/docs/audit-mas.md
+new file mode 100644
+index 0000000..0b2623b
+--- /dev/null
++++ b/docs/audit-mas.md
+@@ -0,0 +1,36 @@
++# FLAGGG MAS ÔÇö Audit (2026-10-26)
++
++Kurzreport: Findings aus dem Handoff-Audit, Fixes und bewusst Zur├╝ckgestelltes.
++
++## Behoben (dieser Durchgang)
++
++| Severity | Thema | Fix |
++|----------|--------|-----|
++| HIGH | `updateState` ohne CAS | `WHERE id=? AND state=?`, Fehler bei `changesÔëá1` |
++| HIGH | Child fertig vor `waiting_on_child` | `delegateTask`: zuerst `waiting_on_child`, dann `enqueue`, dann `checkChildrenStatus` |
++| HIGH | Parallele Synthese / Doppel-Reports | `markSynthesized` CAS + Claim-vor-Enqueue; Worker serialisiert `synthesize` |
++| HIGH | Symlink-Escape in ToolRunner | `_resolveInside` mit `realpath` |
++| HIGH | SSRF web_fetch/download/install | Private/link-local/localhost blocken; Redirects manuell + erneut pr├╝fen |
++| MED | `teams`-Map Leak | `finally { teams.delete }` |
++| MED | Quit ohne Abort | `before-quit` abortet `streams` + `teams` |
++
++Zus├ñtzlich: GitHub-Readiness (`.gitignore`, README, CI), Plugin-Sandbox (`install_skill` / VM).
++
++## Zur├╝ckgestellt (bewusst)
++
++| Severity | Thema | Warum |
++|----------|--------|--------|
++| CRITICAL (Produkt) | Uneingeschr├ñnktes `execute_shell` | Self-Heal braucht `pip`/`npm`; Risiko im README dokumentiert. Follow-up: engeres Allowlisting oder Job-Object-Sandbox. |
++| MED | Quota-Backoff Multi-Conn Edge | CAS erg├ñnzt; Concurrent-429-Tests optional. |
++| MED | Watchdog vs. complete Multi-Conn | CAS mindert; dedizierter Race-Test optional. |
++| LOW | Orphan-State `claimed` | Watchdog sweep nur `running`/`waiting_on_child`. Follow-up: claimed-TTL. |
++| MED | stderr ÔåÆ Boss-Prompt Injection | Truncation existiert teilweise; h├ñrtere Delimiter/Sanitizer Follow-up. |
++| INFO | UI-Plugin-Marketplace | Bleibt Mock; echte Registry nur ├╝ber ToolRunner-Skills. |
++
++## Verifikation
++
++```bash
++cd harness-pro && npm test
++```
++
++Neue Tests: `test/race-cas.test.js`, `test/skill-sandbox.test.js`, `test/install-skill.test.js`.
+diff --git a/fr-gateway/bin/fr-manager b/fr-gateway/bin/fr-manager
+new file mode 100644
+index 0000000..0684209
+--- /dev/null
++++ b/fr-gateway/bin/fr-manager
+@@ -0,0 +1,429 @@
++#!/usr/bin/env python3
++# language: python3, file: fr-manager, runtime: stdlib only, target: ubuntu/debian host
++"""
++fr-manager ÔÇö watcher/orchestrator fuer fr-gateway container.
++
++Aufgaben:
++  - keys_raw.txt ueberwachen (alle 30s), neue Keys als eigenen Container starten
++  - Hostport fortlaufend ab 20129, persistente Zuteilung in registry.json
++  - model_family: position in keys_raw.txt (1-22 astra, 23+ opus)
++  - keys.map.json (unique_key -> raw_key) aendern -> betroffene Container neu setzen
++  - --status: Tabelle nr | key-hash | port | container | state | family | tokens | limit | reset
++  - --reaper: Keys die fehlen -> Container stoppen/entfernen (Volume bleibt)
++"""
++import argparse
++import datetime
++import hashlib
++import json
++import os
++import socket
++import subprocess
++import sys
++import time
++
++BASE = "/opt/fr-gateway"
++KEYS_FILE = os.path.join(BASE, "keys_raw.txt")
++MAP_FILE = os.path.join(BASE, "keys.map.json")
++REGISTRY_FILE = os.path.join(BASE, "registry.json")
++GATEWAY_DIR = os.path.join(BASE, "gateway")
++IMAGE = "fr-gateway:latest"
++
++SEED_PORT = 20129
++PORT_SPAN = 128
++DAILY_LIMIT_DEFAULT = 2000000
++ASTRA_COUNT = 22
++LOG_DIR = "/var/log/fr-gateway"
++DATA_ROOT = "/var/lib/fr-gateway"
++WATCH_INTERVAL = 30
++
++# Nie echte Keys im Repo. Seed nur aus KEYS_FILE / Docker-Secrets.
++SEED_KEYS = []
++
++
++def log(msg, level="info"):
++    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
++    line = "[%s] [%s] %s" % (ts, level, msg)
++    print(line, flush=True)
++    try:
++        os.makedirs(LOG_DIR, exist_ok=True)
++        with open(os.path.join(LOG_DIR, "manager.log"), "a", encoding="utf-8") as f:
++            f.write(line + "\n")
++    except Exception:
++        pass
++
++
++def run(cmd, timeout=120, check=True):
++    try:
++        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
++    except subprocess.TimeoutExpired:
++        log("timeout: " + " ".join(cmd), "error")
++        return 124, "", "timeout"
++    if check and p.returncode != 0:
++        log("cmd fehlgeschlagen (%d): %s" % (p.returncode, " ".join(cmd)), "error")
++        log("stdout: " + p.stdout[-2000:], "error")
++        log("stderr: " + p.stderr[-2000:], "error")
++    return p.returncode, p.stdout, p.stderr
++
++
++# ---------------------------------------------------------------------------
++# registry (liste von eintraegen)
++# ---------------------------------------------------------------------------
++
++def registry_load():
++    if not os.path.exists(REGISTRY_FILE):
++        return []
++    try:
++        with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
++            data = json.load(f)
++        if isinstance(data, list):
++            return data
++    except Exception as e:
++        log("registry defekt: %s" % e, "error")
++    return []
++
++
++def registry_save(reg):
++    os.makedirs(BASE, exist_ok=True)
++    tmp = REGISTRY_FILE + ".tmp"
++    with open(tmp, "w", encoding="utf-8") as f:
++        json.dump(reg, f, indent=2, sort_keys=True)
++        f.flush()
++        os.fsync(f.fileno())
++    os.replace(tmp, REGISTRY_FILE)
++
++
++# ---------------------------------------------------------------------------
++# keys / map
++# ---------------------------------------------------------------------------
++
++def key_hash(key):
++    return hashlib.sha256(key.encode("utf-8")).hexdigest()
++
++
++def container_name(key):
++    return "fr-key-" + key_hash(key)[:12]
++
++
++def read_keys():
++    if not os.path.exists(KEYS_FILE):
++        return []
++    out = []
++    with open(KEYS_FILE, "r", encoding="utf-8") as f:
++        for ln in f:
++            ln = ln.strip()
++            if ln and not ln.startswith("#"):
++                out.append(ln)
++    return out
++
++
++def load_map():
++    if not os.path.exists(MAP_FILE):
++        return {}
++    try:
++        with open(MAP_FILE, "r", encoding="utf-8") as f:
++            m = json.load(f)
++        if isinstance(m, dict):
++            return m
++    except Exception as e:
++        log("map defekt: %s" % e, "error")
++    return {}
++
++
++def raw_to_unique(map_data, raw):
++    for u, r in map_data.items():
++        if r == raw:
++            return u
++    return None
++
++
++# ---------------------------------------------------------------------------
++# docker
++# ---------------------------------------------------------------------------
++
++def port_in_use(port):
++    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
++    s.settimeout(0.3)
++    try:
++        return s.connect_ex(("127.0.0.1", port)) == 0
++    finally:
++        s.close()
++
++
++def next_free_port(reg, avoid=None):
++    used = {e.get("port") for e in reg if e.get("port")}
++    avoid = avoid or set()
++    for p in range(SEED_PORT, SEED_PORT + PORT_SPAN):
++        if p in used or p in avoid:
++            continue
++        if not port_in_use(p):
++            return p
++    return None
++
++
++def ensure_image():
++    rc, _, _ = run(["docker", "image", "inspect", IMAGE], check=False)
++    if rc == 0:
++        return True
++    log("baue image %s" % IMAGE)
++    rc, _, _ = run(["docker", "build", "-t", IMAGE, GATEWAY_DIR], timeout=600, check=False)
++    return rc == 0
++
++
++def container_exists(name):
++    rc, _, _ = run(["docker", "inspect", name], check=False)
++    return rc == 0
++
++
++def container_running(name):
++    rc, out, _ = run(["docker", "inspect", "--format", "{{.State.Running}}", name], check=False)
++    if rc != 0:
++        return None
++    return out.strip() == "true"
++
++
++def container_env(name):
++    rc, out, _ = run(
++        ["docker", "inspect", "--format", "{{range .Config.Env}}{{.}}\n{{end}}", name],
++        check=False,
++    )
++    if rc != 0:
++        return {}
++    env = {}
++    for line in out.splitlines():
++        if "=" in line:
++            k, v = line.split("=", 1)
++            env[k] = v
++    return env
++
++
++def start_container(entry, raw_key):
++    name = entry["container"]
++    limit = entry.get("limit_override") or DAILY_LIMIT_DEFAULT
++    vol_cnt = os.path.join(DATA_ROOT, name)
++    vol_log = os.path.join(LOG_DIR, name)
++    os.makedirs(vol_cnt, exist_ok=True)
++    os.makedirs(vol_log, exist_ok=True)
++
++    cmd = [
++        "docker", "run", "-d", "--name", name,
++        "--add-host", "host.docker.internal:host-gateway",
++        "-p", "%d:80" % entry["port"],
++        "-v", "%s:/var/lib/fr-gateway-counter" % vol_cnt,
++        "-v", "%s:/var/log/nginx" % vol_log,
++        "--restart", "unless-stopped",
++        "--log-driver", "json-file",
++        "--log-opt", "max-size=10m",
++        "--log-opt", "max-file=3",
++        "-e", "UPSTREAM_URL=http://host.docker.internal:20128/v1",
++        "-e", "UPSTREAM_API_KEY=%s" % raw_key,
++        "-e", "DAILY_TOKEN_LIMIT=%d" % limit,
++        "-e", "RESET_TZ=UTC",
++        "-e", "CLIENT_API_KEY=%s" % entry.get("client_api_key", ""),
++        "-e", "MODEL_FAMILY=%s" % entry.get("model_family", "?"),
++        IMAGE,
++    ]
++    rc, out, err = run(cmd, timeout=180, check=False)
++    if rc != 0:
++        combined = (out + err).lower()
++        if "address already in use" in combined:
++            newport = next_free_port([], avoid={entry["port"]})
++            if newport is not None:
++                log("port %d belegt, nehme %d" % (entry["port"], newport), "warn")
++                entry["port"] = newport
++                return start_container(entry, raw_key)
++        return False
++    log("container %s gestartet auf :%d (family=%s)" % (
++        name, entry["port"], entry.get("model_family", "?")))
++    return True
++
++
++def recreate_container(entry, raw_key):
++    name = entry["container"]
++    run(["docker", "rm", "-f", name], check=False)
++    time.sleep(1)
++    return start_container(entry, raw_key)
++
++
++# ---------------------------------------------------------------------------
++# watch
++# ---------------------------------------------------------------------------
++
++def watch_once(reg, reaper=False):
++    changed = False
++    keys = read_keys()
++    hash_to_raw = {key_hash(k): k for k in keys}
++    pos_of = {key_hash(k): i + 1 for i, k in enumerate(keys)}
++    by_hash = {e["key_hash"]: e for e in reg}
++    m = load_map()
++
++    # neue keys -> container starten
++    for raw in keys:
++        h = key_hash(raw)
++        if h in by_hash:
++            continue
++        entry = {
++            "key_hash": h,
++            "port": None,
++            "container": container_name(raw),
++            "created": datetime.datetime.now(datetime.timezone.utc).isoformat(),
++            "model_family": "astra" if pos_of[h] <= ASTRA_COUNT else "opus",
++            "limit_override": None,
++            "client_api_key": raw_to_unique(m, raw) or "",
++        }
++        p = next_free_port(reg)
++        if p is None:
++            log("kein freier port fuer %s" % h, "error")
++            continue
++        entry["port"] = p
++        if start_container(entry, raw):
++            reg.append(entry)
++            by_hash[h] = entry
++            changed = True
++        else:
++            log("start fehlgeschlagen: %s" % h, "error")
++
++    # bekannte keys -> wiederherstellen / env-diff -> recreate
++    for entry in reg:
++        h = entry["key_hash"]
++        raw = hash_to_raw.get(h)
++        if raw is None:
++            if reaper and container_exists(entry["container"]):
++                run(["docker", "rm", "-f", entry["container"]], check=False)
++                log("reaper: %s entfernt" % entry["container"])
++            continue
++
++        uniq = raw_to_unique(m, raw) or ""
++        need_recreate = False
++        if not container_exists(entry["container"]):
++            log("container fehlt, starte neu: %s" % entry["container"])
++            need_recreate = True
++        else:
++            env = container_env(entry["container"])
++            if env.get("CLIENT_API_KEY", "") != uniq:
++                log("client_api_key geaendert, recreate: %s" % entry["container"])
++                need_recreate = True
++
++        if need_recreate:
++            if entry.get("port") is None:
++                p = next_free_port(reg)
++                if p is None:
++                    continue
++                entry["port"] = p
++            entry["client_api_key"] = uniq
++            if recreate_container(entry, raw):
++                changed = True
++
++    if changed:
++        registry_save(reg)
++
++
++# ---------------------------------------------------------------------------
++# status
++# ---------------------------------------------------------------------------
++
++def read_usage(cont):
++    p = os.path.join(DATA_ROOT, cont, "counter.json")
++    try:
++        with open(p, "r", encoding="utf-8") as f:
++            d = json.load(f)
++        return int(d.get("tokens", 0))
++    except Exception:
++        return 0
++
++
++def cmd_status():
++    reg = registry_load()
++    keys = read_keys()
++    pos_of = {key_hash(k): i + 1 for i, k in enumerate(keys)}
++    now = datetime.datetime.now(datetime.timezone.utc)
++    reset_iso = (now + datetime.timedelta(days=1)).replace(
++        hour=0, minute=0, second=0, microsecond=0
++    ).isoformat()
++
++    rows = []
++    for e in sorted(reg, key=lambda x: pos_of.get(x["key_hash"], 10 ** 9)):
++        h = e["key_hash"]
++        cont = e.get("container", "-")
++        state = "?"
++        if container_exists(cont):
++            running = container_running(cont)
++            state = "running" if running else "stopped"
++        elif h not in pos_of:
++            state = "absent"
++        rows.append((
++            str(pos_of.get(h, "-")),
++            h[:16],
++            str(e.get("port", "-")),
++            cont,
++            state,
++            e.get("model_family", "?"),
++            str(read_usage(cont)),
++            str(e.get("limit_override") or DAILY_LIMIT_DEFAULT),
++            reset_iso,
++        ))
++
++    header = ("nr", "key-hash", "port", "container", "state", "family",
++              "tokens-heute", "limit", "reset-zeitpunkt")
++    widths = [max(len(header[i]), max((len(r[i]) for r in rows), default=0)) for i in range(len(header))]
++    fmt = " | ".join("{:<%d}" % w for w in widths)
++    print(fmt.format(*header))
++    print("-" * (sum(widths) + 3 * (len(header) - 1)))
++    for r in rows:
++        print(fmt.format(*r))
++    print()
++    total = sum(read_usage(e.get("container", "")) for e in reg)
++    print("eintraege=%d keys=%d tokens-heute-gesamt=%d" % (len(reg), len(keys), total))
++
++
++# ---------------------------------------------------------------------------
++# main
++# ---------------------------------------------------------------------------
++
++def main():
++    ap = argparse.ArgumentParser(prog="fr-manager")
++    ap.add_argument("--watch", action="store_true", help="watcher-schleife (30s)")
++    ap.add_argument("--status", action="store_true", help="status-tabelle drucken")
++    ap.add_argument("--reaper", action="store_true", help="fehlende keys entfernen")
++    args = ap.parse_args()
++
++    os.makedirs(BASE, exist_ok=True)
++    if not os.path.exists(KEYS_FILE):
++        if SEED_KEYS:
++            with open(KEYS_FILE, "w", encoding="utf-8") as f:
++                f.write("\n".join(SEED_KEYS) + "\n")
++            os.chmod(KEYS_FILE, 0o600)
++            log("keys_raw.txt angelegt (%d keys)" % len(SEED_KEYS))
++        else:
++            log(
++                "keys_raw.txt fehlt ÔÇö bitte aus keys_raw.txt.example befuellen "
++                "(keine Seed-Keys im Binary)",
++                "error",
++            )
++            return 2
++    if not os.path.exists(REGISTRY_FILE):
++        registry_save([])
++        log("registry.json angelegt (leer)")
++
++    if args.status:
++        cmd_status()
++        return 0
++
++    if not ensure_image():
++        log("image build fehlgeschlagen", "error")
++        return 1
++
++    if args.watch:
++        log("fr-manager watch laeuft (interval=%ds)" % WATCH_INTERVAL)
++        while True:
++            try:
++                watch_once(registry_load(), args.reaper)
++            except Exception as e:
++                log("watch iteration fehler: %s" % e, "error")
++            time.sleep(WATCH_INTERVAL)
++
++    watch_once(registry_load(), args.reaper)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/fr-gateway/docker-compose.yml b/fr-gateway/docker-compose.yml
+new file mode 100644
+index 0000000..5c965b3
+--- /dev/null
++++ b/fr-gateway/docker-compose.yml
+@@ -0,0 +1,63 @@
++name: fr-gateway
++
++services:
++  manager:
++    build: ./manager
++    container_name: fr-manager
++    restart: unless-stopped
++    command: watch
++    volumes:
++      - ./secrets/keys_raw.txt:/app/keys_raw.txt:ro
++      - ./upstreams.json:/app/upstreams.json:ro
++      - ./secrets:/app/secrets
++      - ./logs/manager:/var/log/fr-gateway
++      - ./logs/gateways:/var/log/gateways
++      - ./data:/var/lib/gateways
++      - ./gateway:/app/gateway:ro
++      - /var/run/docker.sock:/var/run/docker.sock
++    environment:
++      REGISTRY_FILE: /app/secrets/registry.json
++      KEYS_FILE: /app/keys_raw.txt
++      SECRETS_DIR: /app/secrets
++      PORT_START: "20129"
++      DEFAULT_LIMIT: "2000000"
++      RESET_TZ: UTC
++      WATCH_INTERVAL: "30"
++      UPSTREAM_URL: http://host.docker.internal:20128/v1
++      UPSTREAMS_FILE: /app/upstreams.json
++      NETWORK_NAME: fr-gateway_default
++      GATEWAY_IMAGE: fr-gateway:2026-10-25
++      GATEWAY_BUILD_CONTEXT: /app/gateway
++      DATA_ROOT: /var/lib/gateways
++      LOG_ROOT: /var/log/gateways
++
++  panel:
++    build: ./panel
++    container_name: fr-panel
++    restart: unless-stopped
++    depends_on:
++      - manager
++    ports:
++      # Panel nur lokal: Host-Bind auf loopback. (Container-intern bleibt
++      # uvicorn auf 0.0.0.0, sonst waere der Host-Zugriff technisch tot.)
++      - "127.0.0.1:8090:8090"
++    volumes:
++      - ./secrets/keys_raw.txt:/app/keys_raw.txt:ro
++      - ./upstreams.json:/app/upstreams.json:ro
++      - ./secrets:/app/secrets
++      - ./logs/gateways:/app/logs/gateways
++      - ./data:/app/data
++      - /var/run/docker.sock:/var/run/docker.sock
++    environment:
++      REGISTRY_FILE: /app/secrets/registry.json
++      KEYS_FILE: /app/keys_raw.txt
++      UPSTREAMS_FILE: /app/upstreams.json
++      PANEL_TOKEN: "${PANEL_TOKEN:-}"
++      PANEL_ORIGINS: "http://127.0.0.1:8090,http://localhost:8090"
++      SECRETS_DIR: /app/secrets
++      PORT_START: "20129"
++      DEFAULT_LIMIT: "2000000"
++      NETWORK_NAME: fr-gateway_default
++      GATEWAY_IMAGE: fr-gateway:2026-10-25
++      DATA_ROOT: /app/data
++      LOG_ROOT: /app/logs/gateways
+diff --git a/fr-gateway/keys_raw.txt.example b/fr-gateway/keys_raw.txt.example
+new file mode 100644
+index 0000000..cd44b40
+--- /dev/null
++++ b/fr-gateway/keys_raw.txt.example
+@@ -0,0 +1,4 @@
++# One upstream API key per line (no quotes).
++# Copy to secrets/keys_raw.txt and fill in real keys ÔÇö never commit secrets/.
++sk-example-key-replace-me-001
++sk-example-key-replace-me-002
+diff --git a/fr-gateway/registry.example.json b/fr-gateway/registry.example.json
+new file mode 100644
+index 0000000..e7dabef
+--- /dev/null
++++ b/fr-gateway/registry.example.json
+@@ -0,0 +1,15 @@
++[
++  {
++    "container": "fr-key-example",
++    "created": "2026-01-01T00:00:00+00:00",
++    "key_hash": "0000000000000000000000000000000000000000000000000000000000000000",
++    "limit_override": null,
++    "model_family": "astra",
++    "nr": 1,
++    "port": 20129,
++    "raw_key": "sk-example-key-replace-me-001",
++    "state": "running",
++    "unique_key": "vkd-example-unique-key-replace-me",
++    "upstreams_hash": "0000000000000000"
++  }
++]
+diff --git a/harness-pro/fixtures/skills/echo-bundle.json b/harness-pro/fixtures/skills/echo-bundle.json
+new file mode 100644
+index 0000000..48d5d58
+--- /dev/null
++++ b/harness-pro/fixtures/skills/echo-bundle.json
+@@ -0,0 +1,14 @@
++{
++  "id": "echo-helpers",
++  "name": "Echo Helpers",
++  "version": "1.0.0",
++  "entry": "index.js",
++  "description": "Fixture skill for install_skill tests",
++  "tools": [
++    { "name": "echo_upper", "description": "Uppercase a string" }
++  ],
++  "permissions": ["workspace_read", "workspace_write"],
++  "files": {
++    "index.js": "module.exports = { tools: { echo_upper: function (args, ctx) { var t = String((args && args.text) || ''); ctx.writeFile('echo-out.txt', t.toUpperCase()); return { text: t.toUpperCase() }; } } };"
++  }
++}
+diff --git a/harness-pro/lib/role-chat.js b/harness-pro/lib/role-chat.js
+new file mode 100644
+index 0000000..1fa3c94
+--- /dev/null
++++ b/harness-pro/lib/role-chat.js
+@@ -0,0 +1,196 @@
++'use strict';
++// role-chat.js ÔÇö Chat-Bruecke Orchestrator -> fr-gateway-Container (ein Port je Rolle).
++// non-streaming, damit die Runtime ein validierbares result bekommt.
++
++const http = require('http');
++const { sendChatWithRetry } = require('./chat-retry');
++
++// Fast-Fail: echte LLM-Calls duerfen bis zu 60s brauchen, aber nicht ewig haengen.
++const DEFAULT_TIMEOUT_MS = 60000;
++
++const TOOL_HINT = 'Antworte entweder mit dem finalen JSON oder, wenn du ein Tool brauchst, NUR mit ' +
++  '{"tool":"read_file|write_file|execute_shell|web_search|web_fetch|download_file|install_skill|list_skills|uninstall_skill|delegate","args":{...}}. ' +
++  'Paketmanager (pip install, npm install, ...) sind ueber execute_shell erlaubt. Neue Faehigkeiten ' +
++  'als Skill-Bundle per install_skill({url, sha256?}) laden (ohne Shell). Wenn die Aufgabe endgueltig ' +
++  'fehlschlaegt, antworte mit {"ok":false,"error":"<stderr>"}.';
++
++function requestOnce(opts) {
++  const o = opts || {};
++  const timeoutMs = Number(o.timeoutMs) || DEFAULT_TIMEOUT_MS;
++  return new Promise((resolve, reject) => {
++    const body = JSON.stringify(o.body || {});
++    const req = http.request({
++      host: '127.0.0.1',
++      port: o.port,
++      path: '/v1/chat/completions',
++      method: 'POST',
++      headers: {
++        Authorization: 'Bearer ' + (o.key || ''),
++        'Content-Type': 'application/json',
++        'Content-Length': Buffer.byteLength(body),
++      },
++      timeout: timeoutMs,
++    }, res => {
++      let raw = '';
++      res.setEncoding('utf8');
++      res.on('data', c => { raw += c; });
++      res.on('end', () => {
++        if (res.statusCode !== 200) {
++          const err = new Error('gateway http ' + res.statusCode);
++          err.status = res.statusCode;
++          err.body = raw.slice(0, 300);
++          return reject(err);
++        }
++        try {
++          resolve(JSON.parse(raw));
++        } catch (e) {
++          reject(new Error('antwort nicht lesbar: ' + e.message));
++        }
++      });
++    });
++    req.on('timeout', () => {
++      const err = new Error('TIMEOUT: Agent antwortet nicht innerhalb von ' + timeoutMs + 'ms');
++      err.code = 'TIMEOUT';
++      req.destroy(err);
++    });
++    req.on('error', err => reject(err));
++    req.write(body);
++    req.end();
++  });
++}
++
++function parseContent(choice) {
++  const content = choice && choice.choices && choice.choices[0] &&
++    choice.choices[0].message && choice.choices[0].message.content;
++  if (typeof content !== 'string') return null;
++  const trimmed = content.trim();
++  if (!trimmed) return null;
++  try {
++    return JSON.parse(trimmed);
++  } catch (e) {
++    return { text: trimmed };
++  }
++}
++
++// Kind-Fehler aus child_results ziehen (Fallback, falls die Runtime keinen
++// fertigen self_heal-Kontext mitgeschickt hat). Nur ungeloeste Fehler: ist das
++// neueste Kind done, wurde der Fehler bereits durch einen Fix-Task behoben.
++function stderrOfChild(child) {
++  const c = child || {};
++  const history = Array.isArray(c.error_history) ? c.error_history : [];
++  const withStderr = history.find(e => e && e.stderr);
++  if (withStderr) return String(withStderr.stderr);
++  const withError = history.find(e => e && e.error);
++  if (withError) return String(withError.error);
++  if (c.stderr) return String(c.stderr);
++  if (c.result && typeof c.result === 'object') {
++    return String(c.result.stderr || c.result.error || 'unbekannter Fehler');
++  }
++  return 'unbekannter Fehler';
++}
++
++function failedChildStderr(task) {
++  const children = (task && Array.isArray(task.child_results) ? task.child_results : []).filter(Boolean);
++  if (!children.length) return null;
++  const last = children[children.length - 1];
++  if (!last || (last.state !== 'failed' && last.state !== 'escalated')) return null;
++  return stderrOfChild(last);
++}
++
++// Prompt-Injection fuer den Self-Healing-Loop: der Boss wird gezwungen, den
++// stderr zu analysieren und einen Fix-Task zu delegieren.
++function selfHealInstruction(task) {
++  if (task && task.self_heal && task.self_heal.instruction) return String(task.self_heal.instruction);
++  const stderr = failedChildStderr(task);
++  if (!stderr) return null;
++  return 'Ein vorheriger Task ist fehlgeschlagen. Hier ist der stderr: ' + stderr +
++    '. Delegiere einen Fix-Task an den Agenten, um das Problem zu beheben.';
++}
++
++// Baut den User-Prompt inkl. Tool-Ergebnis, Kind-Ergebnissen und Self-Healing-Injection.
++function buildUserContent(args) {
++  const a = args || {};
++  const task = a.task || {};
++  const payload = task.payload !== undefined ? task.payload : null;
++  const prompt = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
++  const toolResult = task.tool_result ? JSON.stringify(task.tool_result, null, 2) : null;
++  const childResults = Array.isArray(task.child_results) && task.child_results.length
++    ? JSON.stringify(task.child_results, null, 2)
++    : null;
++  const selfHeal = selfHealInstruction(task);
++  return 'Task: ' + (task.title || '') + '\n\nPayload:\n' + prompt +
++    (toolResult ? '\n\nLetztes Tool-Ergebnis:\n' + toolResult : '') +
++    (childResults ? '\n\nKind-Ergebnisse:\n' + childResults : '') +
++    (selfHeal ? '\n\nWICHTIG (Self-Healing):\n' + selfHeal : '') +
++    '\n\n' + TOOL_HINT;
++}
++
++function buildMessages(args) {
++  const a = args || {};
++  return [
++    { role: 'system', content: 'Du bist Agent "' + (a.roleId || 'role') + '" in einer Task-Queue. Antworte ausschliesslich mit einem JSON-Objekt, das die Aufgabe erfuellt.' },
++    { role: 'user', content: buildUserContent(a) },
++  ];
++}
++
++/**
++ * createRoleChat({ maxTokens, timeoutMs, logger })
++ * -> chat({ entry, model, task, roleId, candidates })
++ *    entry: { port, unique_key }
++ */
++function createRoleChat(options) {
++  const o = options || {};
++  const maxTokens = Number(o.maxTokens) || 1024;
++  const timeoutMs = Number(o.timeoutMs) || DEFAULT_TIMEOUT_MS;
++
++  return async function chat(args) {
++    const a = args || {};
++    const entry = a.entry;
++    if (!entry || !entry.port) throw new Error('role-chat: kein port fuer die rolle');
++
++    const body = {
++      model: a.model || 'gpt-6-astra',
++      messages: buildMessages({ roleId: a.roleId, task: a.task }),
++      stream: false,
++      max_tokens: maxTokens,
++    };
++
++    const candidates = Array.isArray(a.candidates) && a.candidates.length
++      ? a.candidates
++      : [{ port: entry.port, key: entry.unique_key, nr: entry.nr }];
++
++    const outcome = await sendChatWithRetry({
++      candidates,
++      maxAttempts: 1,
++      attempt: candidate => requestOnce({
++        port: candidate.port,
++        key: candidate.key || candidate.unique_key,
++        body,
++        timeoutMs,
++      }),
++    });
++
++    const answer = outcome.result || {};
++    const parsed = parseContent(answer);
++    return {
++      result: parsed,
++      usage: answer.usage || null,
++      model: answer.model || body.model,
++      port: outcome.candidate.port,
++      attempts: outcome.history.length + 1,
++    };
++  };
++}
++
++module.exports = {
++  createRoleChat,
++  requestOnce,
++  parseContent,
++  buildUserContent,
++  buildMessages,
++  selfHealInstruction,
++  failedChildStderr,
++  stderrOfChild,
++  DEFAULT_TIMEOUT_MS,
++  TOOL_HINT,
++};
+diff --git a/harness-pro/lib/skill-sandbox.js b/harness-pro/lib/skill-sandbox.js
+new file mode 100644
+index 0000000..fc9413a
+--- /dev/null
++++ b/harness-pro/lib/skill-sandbox.js
+@@ -0,0 +1,221 @@
++'use strict';
++// skill-sandbox.js ÔÇö laedt Agent-Skills aus Manifest + Entry in einer VM ohne
++// process/require/child_process/fetch. Nur workspace-gebundene ctx-APIs.
++
++const fs = require('fs');
++const path = require('path');
++const vm = require('vm');
++const crypto = require('crypto');
++
++const ALLOWED_PERMISSIONS = new Set(['workspace_read', 'workspace_write']);
++const TOOL_TIMEOUT_MS = 5000;
++const LOAD_TIMEOUT_MS = 2000;
++const SKILL_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
++
++function validateManifest(raw) {
++  if (!raw || typeof raw !== 'object') throw new Error('skill: Manifest fehlt');
++  const id = String(raw.id || '').trim();
++  if (!SKILL_ID_RE.test(id)) throw new Error('skill: ungueltige id');
++  const name = String(raw.name || id).trim();
++  const version = String(raw.version || '0.0.0').trim();
++  const entry = String(raw.entry || 'index.js').trim();
++  if (!entry || entry.indexOf('..') >= 0 || path.isAbsolute(entry)) {
++    throw new Error('skill: ungueltiger entry');
++  }
++  const tools = Array.isArray(raw.tools) ? raw.tools : [];
++  if (!tools.length) throw new Error('skill: tools[] fehlt');
++  const toolNames = [];
++  tools.forEach((t, i) => {
++    if (!t || typeof t.name !== 'string' || !t.name.trim()) {
++      throw new Error('skill: tools[' + i + '].name fehlt');
++    }
++    const n = t.name.trim();
++    if (!/^[a-z][a-z0-9_]{0,63}$/i.test(n)) throw new Error('skill: ungueltiger tool-name: ' + n);
++    toolNames.push(n);
++  });
++  const permissions = Array.isArray(raw.permissions) ? raw.permissions.map(String) : ['workspace_read'];
++  permissions.forEach((p) => {
++    if (!ALLOWED_PERMISSIONS.has(p)) {
++      throw new Error('skill: Permission nicht erlaubt: ' + p + ' (v1: nur workspace_read/write)');
++    }
++  });
++  return { id, name, version, entry, tools: toolNames, permissions, description: String(raw.description || '') };
++}
++
++function sha256(buf) {
++  return crypto.createHash('sha256').update(buf).digest('hex');
++}
++
++function createSkillContext(runner, permissions) {
++  const canRead = permissions.indexOf('workspace_read') >= 0;
++  const canWrite = permissions.indexOf('workspace_write') >= 0;
++  return {
++    readFile(relPath) {
++      if (!canRead) throw new Error('skill: keine workspace_read Permission');
++      return runner.read_file({ path: relPath });
++    },
++    writeFile(relPath, content) {
++      if (!canWrite) throw new Error('skill: keine workspace_write Permission');
++      return runner.write_file({ path: relPath, content: content });
++    },
++    log() {
++      /* no-op / optional later */
++    },
++  };
++}
++
++/**
++ * Laedt Entry-Quelltext in einer VM und liefert { tools: { name: fn } }.
++ */
++function loadSkillModule(source, runner, manifest) {
++  const module = { exports: {} };
++  const sandbox = {
++    module,
++    exports: module.exports,
++    console: {
++      log: function () {},
++      warn: function () {},
++      error: function () {},
++    },
++    // bewusst kein require, process, Buffer, setTimeout mit Netz, fetch
++  };
++  vm.createContext(sandbox);
++  const script = new vm.Script(String(source), { filename: 'skill:' + manifest.id + '/' + manifest.entry });
++  script.runInContext(sandbox, { timeout: LOAD_TIMEOUT_MS });
++  const exported = sandbox.module.exports || sandbox.exports;
++  if (!exported || typeof exported !== 'object') {
++    throw new Error('skill: Entry exportiert kein Objekt');
++  }
++  const toolsObj = exported.tools && typeof exported.tools === 'object' ? exported.tools : exported;
++  const ctx = createSkillContext(runner, manifest.permissions);
++  const bound = {};
++  manifest.tools.forEach((name) => {
++    const fn = toolsObj[name];
++    if (typeof fn !== 'function') {
++      throw new Error('skill: Tool "' + name + '" nicht im Entry exportiert');
++    }
++    bound[name] = async function skillTool(args) {
++      const raw = await runWithTimeout(() => fn.call(null, args || {}, ctx), TOOL_TIMEOUT_MS, name);
++      // VM-Objekte gehoeren einem anderen Realm ÔÇö in den Host klonen
++      return cloneOut(raw);
++    };
++  });
++  return bound;
++}
++
++function cloneOut(value) {
++  if (value === undefined || value === null) return value;
++  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
++  try {
++    return JSON.parse(JSON.stringify(value));
++  } catch (_) {
++    return String(value);
++  }
++}
++
++function runWithTimeout(fn, ms, label) {
++  return new Promise((resolve, reject) => {
++    let settled = false;
++    const timer = setTimeout(() => {
++      if (settled) return;
++      settled = true;
++      reject(new Error('skill: Timeout bei Tool "' + label + '" nach ' + ms + 'ms'));
++    }, ms);
++    Promise.resolve()
++      .then(() => fn())
++      .then((value) => {
++        if (settled) return;
++        settled = true;
++        clearTimeout(timer);
++        resolve(value);
++      })
++      .catch((err) => {
++        if (settled) return;
++        settled = true;
++        clearTimeout(timer);
++        reject(err);
++      });
++  });
++}
++
++function skillDir(workspace, skillId) {
++  return path.join(workspace, 'skills', skillId);
++}
++
++function writeSkillFiles(dir, manifest, files) {
++  fs.mkdirSync(dir, { recursive: true });
++  const manifestPath = path.join(dir, 'skill.json');
++  fs.writeFileSync(
++    manifestPath,
++    JSON.stringify(
++      {
++        id: manifest.id,
++        name: manifest.name,
++        version: manifest.version,
++        entry: manifest.entry,
++        description: manifest.description,
++        tools: manifest.tools.map((n) => ({ name: n })),
++        permissions: manifest.permissions,
++      },
++      null,
++      2,
++    ),
++    'utf8',
++  );
++  Object.keys(files).forEach((rel) => {
++    if (!rel || rel.indexOf('..') >= 0 || path.isAbsolute(rel)) {
++      throw new Error('skill: ungueltiger Dateiname im Bundle: ' + rel);
++    }
++    const abs = path.join(dir, rel);
++    fs.mkdirSync(path.dirname(abs), { recursive: true });
++    fs.writeFileSync(abs, files[rel], 'utf8');
++  });
++}
++
++function loadSkillFromDisk(runner, dir) {
++  const manifestPath = path.join(dir, 'skill.json');
++  if (!fs.existsSync(manifestPath)) throw new Error('skill.json fehlt in ' + dir);
++  const manifest = validateManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
++  const entryPath = path.join(dir, manifest.entry);
++  if (!fs.existsSync(entryPath)) throw new Error('skill entry fehlt: ' + manifest.entry);
++  const source = fs.readFileSync(entryPath, 'utf8');
++  const tools = loadSkillModule(source, runner, manifest);
++  return { manifest, tools };
++}
++
++/**
++ * Bundle-JSON:
++ * {
++ *   "id", "name", "version", "entry", "tools", "permissions",
++ *   "files": { "index.js": "module.exports = { tools: { ... } }" }
++ * }
++ */
++function parseBundle(text) {
++  let data;
++  try {
++    data = JSON.parse(String(text));
++  } catch (err) {
++    throw new Error('skill: Bundle ist kein JSON (' + err.message + ')');
++  }
++  const files = data.files && typeof data.files === 'object' ? data.files : null;
++  if (!files) throw new Error('skill: Bundle braucht files{} mit Entry-Quelltext');
++  const entry = String(data.entry || 'index.js');
++  if (typeof files[entry] !== 'string') {
++    throw new Error('skill: files["' + entry + '"] fehlt im Bundle');
++  }
++  const manifest = validateManifest(data);
++  return { manifest, files };
++}
++
++module.exports = {
++  validateManifest,
++  sha256,
++  loadSkillModule,
++  loadSkillFromDisk,
++  writeSkillFiles,
++  skillDir,
++  parseBundle,
++  SKILL_ID_RE,
++  TOOL_TIMEOUT_MS,
++  ALLOWED_PERMISSIONS,
++};
+diff --git a/harness-pro/lib/tool-runner.js b/harness-pro/lib/tool-runner.js
+new file mode 100644
+index 0000000..1884809
+--- /dev/null
++++ b/harness-pro/lib/tool-runner.js
+@@ -0,0 +1,673 @@
++'use strict';
++// tool-runner.js ÔÇö die "Haende" der Agenten. Alle Pfade bleiben im Workspace,
++// Shell-Befehle laufen dort mit Timeout und begrenztem Buffer.
++// Netzwerk-Tools (web_search/web_fetch/download_file) nutzen options.fetch
++// (Tests) oder globalThis.fetch; Antworten sind immer groessenbegrenzt.
++
++const fs = require('fs');
++const path = require('path');
++const { execFile } = require('child_process');
++const {
++  parseBundle,
++  sha256,
++  writeSkillFiles,
++  loadSkillFromDisk,
++  skillDir,
++} = require('./skill-sandbox');
++
++const BUILTIN_TOOLS = new Set([
++  'read_file',
++  'write_file',
++  'execute_shell',
++  'web_search',
++  'web_fetch',
++  'download_file',
++  'install_skill',
++  'list_skills',
++  'uninstall_skill',
++]);
++
++const MAX_OUTPUT = 1024 * 1024; // 1 MB
++const SHELL_TIMEOUT_MS = 60000;
++const MAX_READ = 512 * 1024;
++
++const MAX_FETCH_BYTES = 1024 * 1024; // 1 MB fuer web_search/web_fetch
++const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20 MB fuer download_file
++const WEB_TIMEOUT_MS = 15000;
++const DOWNLOAD_TIMEOUT_MS = 60000;
++const SHELL_MIN_TIMEOUT_MS = 1000;
++const SHELL_MAX_TIMEOUT_MS = 300000;
++const DDG_SEARCH_URL = 'https://html.duckduckgo.com/html/?q=';
++const DEFAULT_USER_AGENT =
++  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
++
++// ---------- kleine Helfer ----------
++
++function formatLimit(bytes) {
++  const value = Number(bytes) || 0;
++  if (value >= 1024 * 1024 && value % (1024 * 1024) === 0) return value / (1024 * 1024) + ' MB';
++  if (value >= 1024 && value % 1024 === 0) return value / 1024 + ' KB';
++  return value + ' Bytes';
++}
++
++function codePointToString(codePoint) {
++  if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return '';
++  try {
++    return String.fromCodePoint(codePoint);
++  } catch (_) {
++    return '';
++  }
++}
++
++// loest benannte und numerische HTML-Entities auf
++function decodeEntities(input) {
++  return String(input === undefined || input === null ? '' : input)
++    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => codePointToString(parseInt(hex, 16)))
++    .replace(/&#([0-9]+);/g, (_, dec) => codePointToString(parseInt(dec, 10)))
++    .replace(/&nbsp;/gi, ' ')
++    .replace(/&quot;/gi, '"')
++    .replace(/&apos;/gi, "'")
++    .replace(/&lt;/gi, '<')
++    .replace(/&gt;/gi, '>')
++    .replace(/&amp;/gi, '&');
++}
++
++// entfernt Tags, decodiert Entities, normalisiert Whitespace (fuer Titel/Snippets)
++function stripHtml(input) {
++  const withoutTags = String(input === undefined || input === null ? '' : input).replace(/<[^>]*>/g, ' ');
++  return decodeEntities(withoutTags).replace(/\s+/g, ' ').trim();
++}
++
++// HTML-Seite -> reiner Text: Skripte/Styles/Noscripts/Kommentare samt Inhalt raus
++function htmlToText(input) {
++  let text = String(input === undefined || input === null ? '' : input);
++  text = text.replace(/<!--[\s\S]*?-->/g, ' ');
++  text = text.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ');
++  text = text.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ');
++  text = text.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript\s*>/gi, ' ');
++  text = text.replace(/<[^>]*>/g, ' ');
++  return decodeEntities(text).replace(/\s+/g, ' ').trim();
++}
++
++function attrValue(attrsRaw, name) {
++  const attrs = String(attrsRaw || '');
++  const re = new RegExp(
++    '(?:^|\\s)' + name + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))',
++    'i',
++  );
++  const match = attrs.match(re);
++  if (!match) return '';
++  if (match[1] !== undefined) return match[1];
++  if (match[2] !== undefined) return match[2];
++  return match[3] !== undefined ? match[3] : '';
++}
++
++function hasClass(classAttr, name) {
++  const value = String(classAttr || '').trim();
++  if (!value) return false;
++  return value.split(/\s+/).indexOf(name) >= 0;
++}
++
++// DuckDuckGo-Redirect (//duckduckgo.com/l/?uddg=<encoded>) aufloesen
++function resolveDdgHref(href) {
++  const raw = decodeEntities(href).trim();
++  if (!raw) return '';
++  let target = raw;
++  try {
++    const parsed = new URL(raw, 'https://duckduckgo.com');
++    const uddg = parsed.searchParams.get('uddg');
++    target = uddg ? uddg : parsed.toString();
++  } catch (_) {
++    target = raw;
++  }
++  return /^https?:\/\//i.test(target) ? target : '';
++}
++
++// <a class="result__snippet">...</a> im Abstand zwischen zwei Treffern finden
++function findSnippet(source, start, end) {
++  const gap = source.slice(start, end);
++  const anchorRe = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
++  let match;
++  while ((match = anchorRe.exec(gap))) {
++    if (hasClass(attrValue(match[1], 'class'), 'result__snippet')) return stripHtml(match[2]);
++  }
++  const fallback = gap.match(/result__snippet[^>]*>([\s\S]*?)<\/(?:a|div|span)>/i);
++  return fallback ? stripHtml(fallback[1]) : '';
++}
++
++// DDG-HTML -> [{ title, url, snippet }] in Dokumentreihenfolge
++function extractDdgResults(html) {
++  const source = String(html === undefined || html === null ? '' : html);
++  const anchorRe = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
++  const anchors = [];
++  let match;
++  while ((match = anchorRe.exec(source))) {
++    anchors.push({ index: match.index, end: anchorRe.lastIndex, attrs: match[1], inner: match[2] });
++  }
++  const titleAnchors = anchors.filter(
++    (anchor) => hasClass(attrValue(anchor.attrs, 'class'), 'result__a') && attrValue(anchor.attrs, 'href'),
++  );
++  const results = [];
++  for (let i = 0; i < titleAnchors.length; i++) {
++    const anchor = titleAnchors[i];
++    const url = resolveDdgHref(attrValue(anchor.attrs, 'href'));
++    if (!url) continue;
++    const gapEnd = i + 1 < titleAnchors.length ? titleAnchors[i + 1].index : source.length;
++    results.push({
++      title: stripHtml(anchor.inner),
++      url,
++      snippet: findSnippet(source, anchor.end, gapEnd),
++    });
++  }
++  return results;
++}
++
++// nur http(s) zulassen, sonst klarer Fehler
++function requireHttpUrl(raw, label) {
++  if (typeof raw !== 'string' || !raw.trim()) throw new Error(label + ': url fehlt');
++  let parsed;
++  try {
++    parsed = new URL(raw.trim());
++  } catch (_) {
++    throw new Error(label + ': ungueltige URL: ' + raw);
++  }
++  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
++    throw new Error(label + ': nur http/https erlaubt (nicht ' + parsed.protocol.replace(':', '') + ')');
++  }
++  assertPublicHttpUrl(parsed, label);
++  return parsed.toString();
++}
++
++// SSRF: localhost, private und link-local Ziele ablehnen (Hostname + IP)
++function isPrivateOrLocalHost(hostname) {
++  const host = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
++  if (!host) return true;
++  if (host === 'localhost' || host === 'localhost.localdomain') return true;
++  if (host === '0.0.0.0' || host === '::' || host === '::1') return true;
++  if (host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return true;
++  // IPv4
++  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
++  if (m) {
++    const a = Number(m[1]);
++    const b = Number(m[2]);
++    if (a === 10) return true;
++    if (a === 127) return true;
++    if (a === 0) return true;
++    if (a === 169 && b === 254) return true; // link-local / cloud metadata
++    if (a === 172 && b >= 16 && b <= 31) return true;
++    if (a === 192 && b === 168) return true;
++    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
++  }
++  // IPv6 unique-local / link-local
++  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) return true;
++  return false;
++}
++
++function assertPublicHttpUrl(parsed, label) {
++  if (isPrivateOrLocalHost(parsed.hostname)) {
++    throw new Error(label + ': Zieladresse nicht erlaubt (privat/localhost): ' + parsed.hostname);
++  }
++}
++
++// ---------- ToolRunner ----------
++
++class ToolRunner {
++  constructor(workspace, options) {
++    if (!workspace) throw new Error('ToolRunner: workspace fehlt');
++    this.workspace = path.resolve(String(workspace));
++    const opts = options && typeof options === 'object' ? options : {};
++    // injizierbar fuer Tests; Default ist das globale fetch
++    this.fetch =
++      typeof opts.fetch === 'function'
++        ? opts.fetch
++        : typeof globalThis.fetch === 'function'
++          ? globalThis.fetch
++          : null;
++    this.userAgent =
++      typeof opts.userAgent === 'string' && opts.userAgent.trim() ? opts.userAgent : DEFAULT_USER_AGENT;
++    this.maxDownloadBytes =
++      Number.isFinite(opts.maxDownloadBytes) && opts.maxDownloadBytes > 0
++        ? Math.floor(opts.maxDownloadBytes)
++        : MAX_DOWNLOAD_BYTES;
++    // skillId -> { manifest, tools: { name: fn } }
++    this.skills = new Map();
++    // toolName -> { skillId, fn }
++    this.skillTools = new Map();
++    if (opts.loadSkills !== false) {
++      try {
++        this._loadInstalledSkills();
++      } catch (_) {
++        /* Workspace ohne skills/ ist ok */
++      }
++    }
++  }
++
++  _loadInstalledSkills() {
++    const root = path.join(this.workspace, 'skills');
++    if (!fs.existsSync(root)) return;
++    const dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
++    dirs.forEach((d) => {
++      try {
++        this._registerSkill(loadSkillFromDisk(this, path.join(root, d.name)));
++      } catch (err) {
++        // defekter Skill blockiert den Runner nicht
++      }
++    });
++  }
++
++  _registerSkill(loaded) {
++    const { manifest, tools } = loaded;
++    // bestehende Tools dieses Skills entfernen
++    if (this.skills.has(manifest.id)) {
++      this._unregisterSkill(manifest.id);
++    }
++    Object.keys(tools).forEach((name) => {
++      if (BUILTIN_TOOLS.has(name)) {
++        throw new Error('skill: Tool-Name kollidiert mit Built-in: ' + name);
++      }
++      if (this.skillTools.has(name)) {
++        throw new Error('skill: Tool-Name bereits registriert: ' + name);
++      }
++    });
++    Object.keys(tools).forEach((name) => {
++      this.skillTools.set(name, { skillId: manifest.id, fn: tools[name] });
++    });
++    this.skills.set(manifest.id, { manifest, tools });
++  }
++
++  _unregisterSkill(skillId) {
++    const prev = this.skills.get(skillId);
++    if (!prev) return;
++    Object.keys(prev.tools).forEach((name) => {
++      const entry = this.skillTools.get(name);
++      if (entry && entry.skillId === skillId) this.skillTools.delete(name);
++    });
++    this.skills.delete(skillId);
++  }
++
++  list_skills() {
++    const out = [];
++    this.skills.forEach((entry) => {
++      out.push({
++        id: entry.manifest.id,
++        name: entry.manifest.name,
++        version: entry.manifest.version,
++        tools: entry.manifest.tools.slice(),
++        permissions: entry.manifest.permissions.slice(),
++      });
++    });
++    return out;
++  }
++
++  uninstall_skill(args) {
++    const id = args && args.id ? String(args.id).trim() : '';
++    if (!id) throw new Error('uninstall_skill: id fehlt');
++    this._unregisterSkill(id);
++    const dir = skillDir(this.workspace, id);
++    if (fs.existsSync(dir)) {
++      fs.rmSync(dir, { recursive: true, force: true });
++    }
++    return { ok: true, id };
++  }
++
++  async install_skill(args) {
++    const a = args || {};
++    const url = requireHttpUrl(a.url, 'install_skill');
++    const expectSha = a.sha256 ? String(a.sha256).trim().toLowerCase() : '';
++    const { res, done } = await this._request(url, DOWNLOAD_TIMEOUT_MS);
++    let text;
++    try {
++      const status = res && res.status !== undefined ? Number(res.status) : 200;
++      if (status < 200 || status >= 300) throw new Error('install_skill: HTTP ' + status);
++      text = await this._readBodyText(res, MAX_FETCH_BYTES, 'install_skill');
++    } finally {
++      done();
++    }
++    const digest = sha256(Buffer.from(text, 'utf8'));
++    if (expectSha && digest !== expectSha) {
++      throw new Error('install_skill: sha256 mismatch (erwartet ' + expectSha + ', got ' + digest + ')');
++    }
++    const { manifest, files } = parseBundle(text);
++    if (a.id && String(a.id).trim() && String(a.id).trim() !== manifest.id) {
++      throw new Error('install_skill: id-Argument weicht vom Manifest ab');
++    }
++    const dir = skillDir(this.workspace, manifest.id);
++    writeSkillFiles(dir, manifest, files);
++    const loaded = loadSkillFromDisk(this, dir);
++    this._registerSkill(loaded);
++    return {
++      ok: true,
++      id: manifest.id,
++      name: manifest.name,
++      version: manifest.version,
++      tools: manifest.tools.slice(),
++      sha256: digest,
++      path: path.relative(this.workspace, dir),
++    };
++  }
++
++  // blockiert Pfade ausserhalb des Workspace (auch ../, absolut, Symlink/Junction)
++  _resolveInside(target) {
++    const rel = String(target === undefined || target === null ? '' : target);
++    if (rel.indexOf('\0') >= 0) throw new Error('ungueltiger Pfad');
++    let rootReal;
++    try {
++      rootReal = fs.realpathSync(this.workspace);
++    } catch (_) {
++      rootReal = path.resolve(this.workspace);
++    }
++    const abs = path.resolve(rootReal, rel);
++    const suffixes = [];
++    let candidate = abs;
++    while (!fs.existsSync(candidate)) {
++      suffixes.unshift(path.basename(candidate));
++      const parent = path.dirname(candidate);
++      if (parent === candidate) break;
++      candidate = parent;
++    }
++    let resolvedBase;
++    try {
++      resolvedBase = fs.realpathSync(candidate);
++    } catch (_) {
++      resolvedBase = candidate;
++    }
++    const resolved = suffixes.length ? path.join(resolvedBase, ...suffixes) : resolvedBase;
++    const relToRoot = path.relative(rootReal, resolved);
++    if (relToRoot === '..' || relToRoot.startsWith('..' + path.sep) || path.isAbsolute(relToRoot)) {
++      throw new Error('Pfad ausserhalb des Workspace: ' + rel);
++    }
++    return resolved;
++  }
++
++  read_file(args) {
++    const abs = this._resolveInside(args && args.path);
++    const stat = fs.statSync(abs);
++    if (!stat.isFile()) throw new Error('kein Datei-Pfad: ' + abs);
++    const content = fs.readFileSync(abs, 'utf8');
++    return content.length > MAX_READ ? content.slice(0, MAX_READ) + '\n[gekuerzt]' : content;
++  }
++
++  write_file(args) {
++    const abs = this._resolveInside(args && args.path);
++    const content = args && args.content !== undefined ? String(args.content) : '';
++    fs.mkdirSync(path.dirname(abs), { recursive: true });
++    fs.writeFileSync(abs, content, 'utf8');
++    return { path: path.relative(this.workspace, abs), bytes: Buffer.byteLength(content, 'utf8') };
++  }
++
++  execute_shell(args) {
++    const command = args && args.command;
++    if (typeof command !== 'string' || !command.trim()) throw new Error('command fehlt');
++    // Bewusst KEINE Whitelist: Paketmanager wie `pip install`, `npm install` oder
++    // `git clone` bleiben erlaubt ÔÇö Agenten/Skills duerfen sich selbst heilen und
++    // Werkzeuge nachladen. Schutz kommt von Timeout, Buffer-Limit und Workspace-cwd.
++    let timeoutMs = SHELL_TIMEOUT_MS;
++    const rawTimeout = args && (args.timeout_ms !== undefined ? args.timeout_ms : args.timeoutMs);
++    if (rawTimeout !== undefined && rawTimeout !== null) {
++      const parsed = Number(rawTimeout);
++      if (Number.isFinite(parsed)) {
++        timeoutMs = Math.min(SHELL_MAX_TIMEOUT_MS, Math.max(SHELL_MIN_TIMEOUT_MS, Math.floor(parsed)));
++      }
++    }
++    const maxBuffer = MAX_OUTPUT;
++    return new Promise((resolve, reject) => {
++      execFile(
++        process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
++        process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command],
++        { cwd: this.workspace, timeout: timeoutMs, maxBuffer, windowsHide: true },
++        (err, stdout, stderr) => {
++          if (err) {
++            const e = new Error('shell fehlgeschlagen: ' + (err.message || 'unbekannt'));
++            e.stdout = String(stdout || '');
++            e.stderr = String(stderr || '');
++            e.code = err.code;
++            e.exitCode = typeof err.code === 'number' ? err.code : null;
++            return reject(e);
++          }
++          resolve({ stdout: String(stdout || ''), stderr: String(stderr || ''), exitCode: 0 });
++        },
++      );
++    });
++  }
++
++  // HTTP-GET mit AbortController-Timeout; done() muss nach dem Body-Lesen laufen
++  async _request(url, timeoutMs) {
++    const fetchFn = this.fetch;
++    if (typeof fetchFn !== 'function') {
++      throw new Error('fetch nicht verfuegbar (kein globalThis.fetch und kein options.fetch)');
++    }
++    // Redirect manuell: jedes Hop gegen SSRF pruefen
++    const controller = new AbortController();
++    const timer = setTimeout(() => {
++      try {
++        controller.abort();
++      } catch (_) {
++        /* ignore */
++      }
++    }, timeoutMs);
++    const done = () => clearTimeout(timer);
++    try {
++      let current = requireHttpUrl(url, 'request');
++      for (let hop = 0; hop < 5; hop += 1) {
++        const res = await fetchFn(current, {
++          method: 'GET',
++          redirect: 'manual',
++          headers: {
++            'user-agent': this.userAgent,
++            accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
++            'accept-language': 'de-DE,de;q=0.9,en;q=0.8',
++          },
++          signal: controller.signal,
++        });
++        const status = res && res.status !== undefined ? Number(res.status) : 200;
++        if (status >= 300 && status < 400) {
++          const loc = this._header(res, 'location');
++          if (!loc) throw new Error('request: Redirect ohne Location');
++          let next;
++          try {
++            next = new URL(loc, current).toString();
++          } catch (_) {
++            throw new Error('request: ungueltige Redirect-URL');
++          }
++          current = requireHttpUrl(next, 'request');
++          continue;
++        }
++        return { res, done, finalUrl: current };
++      }
++      throw new Error('request: zu viele Redirects');
++    } catch (err) {
++      done();
++      if (controller.signal.aborted || (err && (err.name === 'AbortError' || err.code === 'ABORT_ERR'))) {
++        const timeoutErr = new Error(
++          'Zeitueberschreitung nach ' + Math.round(timeoutMs / 1000) + 's: ' + url,
++        );
++        timeoutErr.code = 'ETIMEDOUT';
++        throw timeoutErr;
++      }
++      throw err;
++    }
++  }
++
++  _header(res, name) {
++    const headers = res && res.headers;
++    if (!headers) return '';
++    if (typeof headers.get === 'function') {
++      const value = headers.get(name);
++      return value === null || value === undefined ? '' : String(value);
++    }
++    const wanted = String(name).toLowerCase();
++    const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === wanted);
++    return key === undefined ? '' : String(headers[key]);
++  }
++
++  async _readBodyText(res, maxBytes, label) {
++    const limitError = () =>
++      new Error(label + ': Antwort zu gross (Limit ' + formatLimit(maxBytes) + ' ueberschritten)');
++    const declared = Number(this._header(res, 'content-length'));
++    if (Number.isFinite(declared) && declared > maxBytes) throw limitError();
++    let text;
++    if (res && typeof res.text === 'function') {
++      text = await res.text();
++    } else if (res && typeof res.arrayBuffer === 'function') {
++      text = Buffer.from(await res.arrayBuffer()).toString('utf8');
++    } else {
++      throw new Error(label + ': Antwortkoerper nicht lesbar');
++    }
++    text = String(text === undefined || text === null ? '' : text);
++    if (Buffer.byteLength(text, 'utf8') > maxBytes) throw limitError();
++    return text;
++  }
++
++  async _readBodyBytes(res, maxBytes, label) {
++    const limitError = () =>
++      new Error(label + ': Datei zu gross (Limit ' + formatLimit(maxBytes) + ' ueberschritten)');
++    const declared = Number(this._header(res, 'content-length'));
++    if (Number.isFinite(declared) && declared > maxBytes) throw limitError();
++    const body = res && res.body;
++    if (body && typeof body.getReader === 'function') {
++      // Streaming mit Cap: bei Ueberschreitung sofort abbrechen und verwerfen
++      const reader = body.getReader();
++      const chunks = [];
++      let total = 0;
++      try {
++        for (;;) {
++          const step = await reader.read();
++          if (step.done) break;
++          const chunk = Buffer.from(step.value);
++          total += chunk.length;
++          if (total > maxBytes) {
++            try {
++              await reader.cancel();
++            } catch (_) {
++              /* ignore */
++            }
++            throw limitError();
++          }
++          chunks.push(chunk);
++        }
++      } finally {
++        try {
++          if (typeof reader.releaseLock === 'function') reader.releaseLock();
++        } catch (_) {
++          /* ignore */
++        }
++      }
++      return Buffer.concat(chunks, total);
++    }
++    let buffer;
++    if (res && typeof res.arrayBuffer === 'function') {
++      buffer = Buffer.from(await res.arrayBuffer());
++    } else if (res && typeof res.text === 'function') {
++      buffer = Buffer.from(await res.text(), 'utf8');
++    } else {
++      throw new Error(label + ': Antwortkoerper nicht lesbar');
++    }
++    if (buffer.length > maxBytes) throw limitError();
++    return buffer;
++  }
++
++  async web_search(args) {
++    const query = args && args.query;
++    if (typeof query !== 'string' || !query.trim()) throw new Error('web_search: query fehlt');
++    const target = DDG_SEARCH_URL + encodeURIComponent(query.trim());
++    const { res, done } = await this._request(target, WEB_TIMEOUT_MS);
++    let html;
++    try {
++      const status = res && res.status !== undefined ? Number(res.status) : 200;
++      if (status !== 200) throw new Error('web_search: HTTP ' + status + ' von DuckDuckGo');
++      html = await this._readBodyText(res, MAX_FETCH_BYTES, 'web_search');
++    } finally {
++      done();
++    }
++    const results = extractDdgResults(html).slice(0, 3);
++    if (results.length === 0) throw new Error('web_search: keine Ergebnisse (ggf. blockiert)');
++    return results;
++  }
++
++  async web_fetch(args) {
++    const rawUrl = args && args.url;
++    const url = requireHttpUrl(rawUrl, 'web_fetch');
++    const { res, done } = await this._request(url, WEB_TIMEOUT_MS);
++    let text;
++    let contentType;
++    try {
++      const status = res && res.status !== undefined ? Number(res.status) : 200;
++      if (status < 200 || status >= 300) throw new Error('web_fetch: HTTP ' + status);
++      contentType = this._header(res, 'content-type');
++      text = await this._readBodyText(res, MAX_FETCH_BYTES, 'web_fetch');
++    } finally {
++      done();
++    }
++    const isHtml = /html/i.test(contentType) || (!contentType && /^\s*<[a-z!]/i.test(text));
++    return isHtml ? htmlToText(text) : text;
++  }
++
++  async download_file(args) {
++    const rawUrl = args && args.url;
++    const url = requireHttpUrl(rawUrl, 'download_file');
++    const relPath = args && args.path;
++    if (typeof relPath !== 'string' || !relPath.trim()) throw new Error('download_file: path fehlt');
++    // Pfad-Grenze zuerst pruefen: kein Netzwerk fuer Ziele ausserhalb des Workspace
++    const abs = this._resolveInside(relPath);
++    fs.mkdirSync(path.dirname(abs), { recursive: true });
++    const { res, done } = await this._request(url, DOWNLOAD_TIMEOUT_MS);
++    let bytes;
++    let status;
++    try {
++      status = res && res.status !== undefined ? Number(res.status) : 200;
++      // keine Fehlerseiten (404/500/...) als Datei speichern
++      if (status < 200 || status >= 300) throw new Error('download_file: HTTP ' + status + ' fuer ' + url);
++      bytes = await this._readBodyBytes(res, this.maxDownloadBytes, 'download_file');
++    } finally {
++      done();
++    }
++    fs.writeFileSync(abs, bytes);
++    return { path: path.relative(this.workspace, abs), bytes: bytes.length, status };
++  }
++
++  // zentrale Ausfuehrung: Built-ins zuerst, dann Skill-Registry
++  async execute(toolName, args) {
++    switch (toolName) {
++      case 'read_file':
++        return this.read_file(args || {});
++      case 'write_file':
++        return this.write_file(args || {});
++      case 'execute_shell':
++        return this.execute_shell(args || {});
++      case 'web_search':
++        return this.web_search(args || {});
++      case 'web_fetch':
++        return this.web_fetch(args || {});
++      case 'download_file':
++        return this.download_file(args || {});
++      case 'install_skill':
++        return this.install_skill(args || {});
++      case 'list_skills':
++        return this.list_skills(args || {});
++      case 'uninstall_skill':
++        return this.uninstall_skill(args || {});
++      default: {
++        const skill = this.skillTools.get(toolName);
++        if (skill && typeof skill.fn === 'function') {
++          return skill.fn(args || {});
++        }
++        throw new Error('unbekanntes Tool: ' + toolName);
++      }
++    }
++  }
++
++  // Kompatibilitaets-Alias (aeltere Aufrufer nutzen run)
++  async run(toolName, args) {
++    return this.execute(toolName, args);
++  }
++}
++
++module.exports = {
++  ToolRunner,
++  MAX_OUTPUT,
++  SHELL_TIMEOUT_MS,
++  MAX_FETCH_BYTES,
++  MAX_DOWNLOAD_BYTES,
++  isPrivateOrLocalHost,
++  BUILTIN_TOOLS,
++};
+diff --git a/harness-pro/main.js b/harness-pro/main.js
+new file mode 100644
+index 0000000..4963f83
+--- /dev/null
++++ b/harness-pro/main.js
+@@ -0,0 +1,1048 @@
++// main.js ÔÇö Electron-H├╝lle f├╝r Astra Harness
++// l├ñdt die Web-App und stellt genau EINE API bereit: das eigene Gateway,
++// mit dem Astra-Modell. Schl├╝ssel: data/astra-key.txt oder aus der Registry.
++const { app, BrowserWindow, shell, ipcMain } = require('electron');
++const http = require('http');
++const fs = require('fs');
++const path = require('path');
++
++const taskqueue = require('./taskqueue');
++const { QueueClient } = require('./taskqueue/client');
++const { sendChatWithRetry } = require('./lib/chat-retry');
++const { TaskBroadcaster } = require('./lib/task-broadcast');
++const { createRoleChat } = require('./lib/role-chat');
++const { scriptedTransport } = require('./lib/scripted-chat');
++const { liveStubTransport } = require('./lib/live-stub');
++const { createDeskWriter } = require('./lib/desk-writer');
++
++const ROOT = __dirname;
++const REGISTRY = path.join(ROOT, '..', 'fr-gateway', 'secrets', 'registry.json');
++const DESK_FILE = path.join(ROOT, 'data', 'desk.json');
++const MARK = path.join(ROOT, 'assets', 'mark.jpg');
++const ASTRA_MODEL = process.env.ASTRA_MODEL || 'gpt-6-astra';
++const KEY_FILE = path.join(ROOT, 'data', 'astra-key.txt');
++const TOKEN_LIMIT = 2000000;
++
++// einziger Schreiber fuer desk.json (mutex + atomar)
++const deskWriter = createDeskWriter({ file: DESK_FILE });
++
++// Ein Key = genau ein Modell. Unter einem astra-Key wird ausschlie├ƒlich das
++// astra-Modell betrachtet; alle anderen vom Upstream gelisteten Modelle
++// (opus, oc/*, lgw/*, ...) werden ignoriert.
++const FAMILY_MODEL = ASTRA_MODEL;
++function ownModels(ids) {
++  return (Array.isArray(ids) ? ids : []).filter(id => id === FAMILY_MODEL);
++}
++
++// ---------------------------------------------------------------------------
++// die eine Gateway-API: aus der Registry lesen (bevorzugt Familie astra)
++// ---------------------------------------------------------------------------
++function gatewayEnv() {
++  try {
++    const data = JSON.parse(fs.readFileSync(REGISTRY, 'utf-8'));
++    if (!Array.isArray(data)) return null;
++    // 1) Eintrag, der zum eigenen Key (astra-key.txt) geh├Ârt
++    const ck = customKey();
++    let e = null;
++    if (ck) e = data.find(x => x && (x.unique_key === ck || x.raw_key === ck));
++    // 2) sonst bevorzugt Familie astra
++    if (!e) e = data.find(x => x && /astra/i.test(x.model_family || ''));
++    // 3) Fallback: erster Eintrag
++    if (!e) e = data.find(x => x && Number(x.nr) === 1) || data[0];
++    if (!e || !e.port || !e.unique_key) return null;
++    return e;
++  } catch (err) {
++    console.error('[astra] registry lesefehler:', err.message);
++    return null;
++  }
++}
++
++function maskKey(key) {
++  if (!key) return '(kein token)';
++  return key.slice(0, 6) + 'ÔÇóÔÇóÔÇó' + key.slice(-4);
++}
++
++function customKey() {
++  try {
++    const v = fs.readFileSync(KEY_FILE, 'utf-8').trim();
++    return v || null;
++  } catch (err) {
++    return null;
++  }
++}
++
++function claudeInfo() {
++  const e = gatewayEnv();
++  if (!e) return { ok: false, error: 'registry/token nicht gefunden (fr-gateway l├ñuft? start-fr-gateway.bat)', model: ASTRA_MODEL };
++  const token = customKey() || e.unique_key;
++  return {
++    ok: true,
++    nr: e.nr,
++    port: e.port,
++    family: e.model_family || 'astra',
++    model: ASTRA_MODEL,
++    container: e.container || '',
++    token,
++    masked: maskKey(token),
++  };
++}
++
++function publicClaude(info) {
++  if (!info || !info.ok) return info || { ok: false, error: 'kein token' };
++  return { ok: true, nr: info.nr, port: info.port, family: info.family, model: info.model, masked: info.masked };
++}
++
++// ---------------------------------------------------------------------------
++// Failover: weitere Harness-Instanzen (registry-eintr├ñge) und upstream-pool
++// ---------------------------------------------------------------------------
++function loadRegistry() {
++  try {
++    const data = JSON.parse(fs.readFileSync(REGISTRY, 'utf-8'));
++    return Array.isArray(data) ? data : [];
++  } catch (err) {
++    return [];
++  }
++}
++
++function defaultFailover() {
++  return {
++    enabled: true,
++    thresholdPct: 15,
++    hysteresisPct: 10,
++    sticky: true,
++    preferFamily: 'astra',
++    activeNr: null,
++    instances: [],
++  };
++}
++
++function publicInstances() {
++  const primary = gatewayEnv();
++  return loadRegistry()
++    .filter(e => e && e.unique_key && e.port && (!primary || e.nr !== primary.nr))
++    .map(e => ({
++      nr: e.nr,
++      port: e.port,
++      family: e.model_family || 'unknown',
++      masked: maskKey(e.unique_key),
++      limit: e.limit_override || 2000000,
++      enabled: false,
++    }))
++    .sort((a, b) => a.nr - b.nr);
++}
++
++// resolveRoute(): prim├ñr oder failover-ziel anhand der gespeicherten konfiguration
++function resolveRoute() {
++  const primary = gatewayEnv();
++  if (!primary) return null;
++  const desk = loadDesk();
++  const fo = desk.failover || defaultFailover();
++  const viaPrimary = { entry: primary, via: 'primary', activeNr: primary.nr };
++  if (!fo.enabled || fo.activeNr == null) return viaPrimary;
++  const target = loadRegistry().find(e => e && Number(e.nr) === Number(fo.activeNr) && e.unique_key && e.port);
++  if (!target) return viaPrimary;
++  if (fo.preferFamily === 'astra' && target.model_family !== 'astra') return viaPrimary;
++  return { entry: target, via: 'failover', activeNr: target.nr };
++}
++
++function loadDesk() {
++  try {
++    const data = JSON.parse(fs.readFileSync(DESK_FILE, 'utf8'));
++    return {
++      spaces: Array.isArray(data.spaces) ? data.spaces : [],
++      roles: Array.isArray(data.roles) ? data.roles : [],
++      keys: Array.isArray(data.keys) ? data.keys : [],
++      sessionTokens: Number(data.sessionTokens) || 0,
++      failover: data.failover && typeof data.failover === 'object'
++        ? Object.assign(defaultFailover(), data.failover)
++        : defaultFailover(),
++    };
++  } catch (e) {
++    return { spaces: [], roles: [], keys: [], sessionTokens: 0, failover: defaultFailover() };
++  }
++}
++
++function saveDesk(data) {
++  // alle Schreibzugriffe laufen serialisiert ueber den DeskWriter (tmp + rename)
++  return deskWriter.save(data);
++}
++
++function mutateDesk(fn) {
++  return deskWriter.mutate(fn);
++}
++
++function dockerUsage(container) {
++  return new Promise(resolve => {
++    if (!container) return resolve(null);
++    const { execFile } = require('child_process');
++    execFile('docker', ['exec', container, 'cat', '/var/lib/fr-gateway-counter/counter.json'], { timeout: 5000 }, (err, stdout) => {
++      if (err) return resolve(null);
++      try {
++        const n = Number(JSON.parse(String(stdout)).tokens);
++        resolve(Number.isFinite(n) ? n : null);
++      } catch (e) { resolve(null); }
++    });
++  });
++}
++
++// ---------------------------------------------------------------------------
++// Gateway-Client (nur localhost, Bearer = Gateway-Token)
++// ---------------------------------------------------------------------------
++const streams = new Map(); // key -> AbortController
++
++function gwRequest(info, method, apiPath, body, onData, onEnd, onError) {
++  const req = http.request({
++    host: '127.0.0.1',
++    port: info.port,
++    path: apiPath,
++    method,
++    headers: {
++      Authorization: 'Bearer ' + info.token,
++      'Content-Type': 'application/json',
++    },
++    timeout: 300000,
++  }, res => {
++    if (res.statusCode !== 200) {
++      let errBody = '';
++      res.on('data', c => { errBody += c; });
++      res.on('end', () => {
++        let msg = errBody.slice(0, 300);
++        try { const j = JSON.parse(errBody); if (j.error) msg = j.error.message || JSON.stringify(j.error); } catch (e) {}
++        onError({ status: res.statusCode, message: msg });
++      });
++      return;
++    }
++    let buf = '';
++    res.setEncoding('utf-8');
++    res.on('data', chunk => {
++      buf += chunk;
++      let idx;
++      while ((idx = buf.indexOf('\n')) >= 0) {
++        const line = buf.slice(0, idx).replace(/\r$/, '');
++        buf = buf.slice(idx + 1);
++        if (!line.startsWith('data:')) continue;
++        const payload = line.slice(5).trim();
++        if (payload === '[DONE]') continue;
++        try { onData(JSON.parse(payload)); } catch (e) { /* unvollst├ñndig */ }
++      }
++    });
++    res.on('end', () => onEnd());
++    res.on('error', err => onError({ status: 0, message: err.message }));
++  });
++  req.on('timeout', () => { req.destroy(new Error('timeout')); onError({ status: 0, message: 'Zeit├╝berschreitung des Streams' }); });
++  req.on('error', err => { if (err.name !== 'AbortError') onError({ status: 0, message: err.message }); });
++  if (body) req.write(JSON.stringify(body));
++  req.end();
++  return req;
++}
++
++// ---------------------------------------------------------------------------
++// Team / F├╝hrungsrolle: zwei Modelle (Planer + Pr├╝fer) sprechen miteinander
++// ---------------------------------------------------------------------------
++const teams = new Map();
++
++function teamEnv(pattern) {
++  try {
++    const data = JSON.parse(fs.readFileSync(REGISTRY, 'utf-8'));
++    if (!Array.isArray(data)) return null;
++    return data.find(x => x && pattern.test(x.model_family || '')) || data.find(x => x && Number(x.nr) === 1) || data[0] || null;
++  } catch (err) {
++    return null;
++  }
++}
++
++function gwOnce(info, model, sys, user) {
++  return new Promise(resolve => {
++    const body = JSON.stringify({
++      model,
++      messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
++      stream: false,
++      max_tokens: 2048,
++    });
++    const started = Date.now();
++    const req = http.request({
++      host: '127.0.0.1',
++      port: info.port,
++      path: '/v1/chat/completions',
++      method: 'POST',
++      headers: {
++        Authorization: 'Bearer ' + info.token,
++        'Content-Type': 'application/json',
++        'Content-Length': Buffer.byteLength(body),
++      },
++      timeout: 120000,
++    }, res => {
++      let out = '';
++      res.on('data', c => { out += c; });
++      res.on('end', () => {
++        if (res.statusCode === 200) {
++          try {
++            const j = JSON.parse(out);
++            const t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
++            resolve({ text: t, usage: j.usage, ms: Date.now() - started });
++          } catch (e) {
++            resolve({ error: 'parse: ' + e.message });
++          }
++        } else {
++          let m = out.slice(0, 160);
++          try { const j = JSON.parse(out); if (j.error) m = j.error.message || JSON.stringify(j.error); } catch (e) {}
++          resolve({ error: m });
++        }
++      });
++    });
++    req.on('timeout', () => { req.destroy(); resolve({ error: 'Zeit├╝berschreitung' }); });
++    req.on('error', e => resolve({ error: e.message }));
++    req.write(body);
++    req.end();
++  });
++}
++
++// ---------------------------------------------------------------------------
++// Fenster
++// ---------------------------------------------------------------------------
++function createWindow() {
++  const win = new BrowserWindow({
++    width: 1480,
++    height: 940,
++    minWidth: 1024,
++    minHeight: 700,
++    backgroundColor: '#0b1220',
++    title: 'Astra Harness',
++    icon: fs.existsSync(MARK) ? MARK : undefined,
++    autoHideMenuBar: true,
++    show: false,
++    webPreferences: {
++      preload: path.join(ROOT, 'preload.js'),
++      contextIsolation: true,
++      nodeIntegration: false,
++      sandbox: true,
++      spellcheck: true,
++    },
++  });
++
++  win.loadFile(path.join(ROOT, 'index.html'));
++  win.once('ready-to-show', () => {
++    // Wunsch: Die Astra Harness startet IMMER minimiert (nur Taskleiste).
++    // showInactive() verhindert Fokus-Klau, minimize() legt sie in die Taskleiste.
++    win.showInactive();
++    win.minimize();
++  });
++
++  win.webContents.setWindowOpenHandler(({ url }) => {
++    if (/^https?:/.test(url)) shell.openExternal(url);
++    return { action: 'deny' };
++  });
++
++  return win;
++}
++
++// ---------------------------------------------------------------------------
++// IPC ÔÇö genau eine API: Gateway (Claude/Opus)
++// ---------------------------------------------------------------------------
++function registerIpc() {
++  ipcMain.handle('astro:info', () => publicClaude(claudeInfo()));
++
++  // listEnvs: nur die eine Gateway-API, damit die App genau diese API kennt
++  ipcMain.handle('astro:envs', () => {
++    const info = claudeInfo();
++    if (!info.ok) return [];
++    return [{
++      nr: info.nr,
++      port: info.port,
++      model_family: info.family,
++      state: 'running',
++      container: info.container,
++      unique_key: info.masked,
++      limit_override: null,
++    }];
++  });
++
++  ipcMain.handle('chat:models', async () => {
++    const info = claudeInfo();
++    if (!info.ok) return [];
++    return new Promise(resolve => {
++      http.get({
++        host: '127.0.0.1',
++        port: info.port,
++        path: '/v1/models',
++        headers: { Authorization: 'Bearer ' + info.token },
++        timeout: 8000,
++      }, res => {
++        let body = '';
++        res.on('data', c => { body += c; });
++        res.on('end', () => {
++          try {
++            const ids = (JSON.parse(body).data || []).map(m => m.id);
++            // nur das eigene Familien-Modell ÔÇö keine fremden Modelle
++            resolve(ownModels(ids));
++          }
++          catch (e) { resolve([]); }
++        });
++      }).on('error', () => resolve([]));
++    });
++  });
++
++  // Kandidaten: aktuell geroutete Instanz zuerst, dann enabled failover-instancen nach Prioritaet
++  function chatCandidates() {
++    const route = resolveRoute();
++    if (!route) return [];
++    const list = [{ entry: route.entry, via: route.via }];
++    const desk = loadDesk();
++    const fo = desk.failover || defaultFailover();
++    if (fo.enabled && Array.isArray(fo.instances)) {
++      const reg = loadRegistry();
++      fo.instances
++        .filter(i => i && i.enabled)
++        .sort((a, b) => (Number(a.priority) || 50) - (Number(b.priority) || 50))
++        .forEach(i => {
++          const e = reg.find(x => x && Number(x.nr) === Number(i.nr) && x.unique_key && x.port);
++          if (e && !list.some(c => Number(c.entry.nr) === Number(e.nr))) {
++            list.push({ entry: e, via: 'failover' });
++          }
++        });
++    }
++    return list;
++  }
++
++  // genau eine Anfrage gegen eine Instanz; retry-faehig nur solange kein Token geflossen ist
++  function chatAttempt(candidate, body, send, ctrl) {
++    const info = Object.assign({}, claudeInfo(), {
++      ok: true,
++      nr: candidate.entry.nr,
++      port: candidate.entry.port,
++      family: candidate.entry.model_family || 'astra',
++      container: candidate.entry.container || '',
++      token: candidate.entry.unique_key,
++    });
++    return new Promise((resolve, reject) => {
++      let streamed = false;
++      let lastModel = body.model;
++      let lastUsage = null;
++      const req = gwRequest(info, 'POST', '/v1/chat/completions', body,
++        j => {
++          if (j.model) lastModel = j.model;
++          if (j.usage) lastUsage = j.usage;
++          const delta = j.choices && j.choices[0] && j.choices[0].delta;
++          const text = (delta && (delta.content || delta.reasoning_content)) || '';
++          if (text) {
++            streamed = true;
++            send('chat:token', { nr: info.nr, delta: text });
++          }
++        },
++        async () => {
++          const added = lastUsage ? Number(lastUsage.total_tokens) ||
++            ((Number(lastUsage.prompt_tokens) || 0) + (Number(lastUsage.completion_tokens) || 0)) : 0;
++          if (added) {
++            // load-modify-write unter dem Desk-Mutex
++            mutateDesk(desk => {
++              desk.sessionTokens = (Number(desk.sessionTokens) || 0) + added;
++            });
++          }
++          const counter = await dockerUsage(info.container);
++          send('chat:done', { nr: info.nr, model: lastModel, usage: lastUsage, counter: counter, via: candidate.via });
++          resolve({ info, model: lastModel, usage: lastUsage });
++        },
++        err => {
++          const e = new Error(err.message || 'unbekannter fehler');
++          e.status = err.status || 0;
++          if (streamed) e.retryable = false; // nach dem ersten Token kein Failover mehr
++          reject(e);
++        }
++      );
++      if (ctrl) ctrl.signal.addEventListener('abort', () => { try { req.destroy(); } catch (e2) {} });
++    });
++  }
++
++  ipcMain.handle('chat:send', (event, payload) => {
++    const candidates = chatCandidates();
++    if (!candidates.length) return { error: 'registry/token nicht gefunden (fr-gateway l├ñuft? start-fr-gateway.bat)' };
++    const win = BrowserWindow.fromWebContents(event.sender);
++    if (!win) return { error: 'kein fenster' };
++
++    const body = {
++      messages: Array.isArray(payload.messages) ? payload.messages : [],
++      stream: true,
++    };
++    const model = payload.model;
++    if (model) body.model = model;
++    const p = payload.params || {};
++    if (typeof p.temperature === 'number') body.temperature = p.temperature;
++    if (typeof p.top_p === 'number') body.top_p = p.top_p;
++    if (typeof p.max_tokens === 'number') body.max_tokens = p.max_tokens;
++    body.stream_options = { include_usage: true };
++
++    const key = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
++    const ctrl = new AbortController();
++    streams.set(key, ctrl);
++    const send = (ch, data) => { if (!win.isDestroyed()) win.webContents.send(ch, data); };
++
++    sendChatWithRetry({
++      candidates,
++      maxAttempts: 3,
++      maxRounds: 2,
++      cooldownMs: 30000,
++      onCooldown: info => send('chat:cooldown', { nr: candidates[0].entry.nr, waitMs: info.waitMs, round: info.round }),
++      attempt: candidate => chatAttempt(candidate, body, send, ctrl),
++    }).then(outcome => {
++      // failover-treffer sticky machen, rueckkehr zum primary aufheben
++      const viaFailover = outcome.candidate.via === 'failover';
++      mutateDesk(desk => {
++        desk.failover = Object.assign(defaultFailover(), desk.failover || {});
++        desk.failover.activeNr = viaFailover ? outcome.candidate.entry.nr : null;
++      });
++    }).catch(err => {
++      send('chat:error', {
++        nr: candidates[0].entry.nr,
++        status: err.status || 0,
++        message: err.message,
++      });
++    }).finally(() => {
++      streams.delete(key);
++    });
++
++    return { ok: true, key, attempts: candidates.length };
++  });
++
++  ipcMain.handle('usage:get', async () => {
++    const route = resolveRoute();
++    const desk = loadDesk();
++    const counter = route ? await dockerUsage(route.entry.container) : null;
++    const used = counter == null ? desk.sessionTokens : counter;
++    return {
++      ok: true,
++      used: used,
++      limit: TOKEN_LIMIT,
++      source: counter == null ? 'session' : 'counter',
++      via: route ? route.via : 'primary',
++      activeNr: route ? route.activeNr : null,
++    };
++  });
++
++  // failover: weitere instanzen + upstream-pool (config im desk.json)
++  ipcMain.handle('failover:list', () => publicInstances());
++  ipcMain.handle('failover:get', () => loadDesk().failover || defaultFailover());
++  ipcMain.handle('failover:save', (_e, conf) => {
++    const next = Object.assign(defaultFailover(), conf || {});
++    next.instances = Array.isArray(next.instances) ? next.instances.map((item, i) => ({
++      nr: Number(item.nr),
++      enabled: !!item.enabled,
++      priority: Number(item.priority) || (i + 1) * 10,
++      maxTokens: Math.max(64, Number(item.maxTokens) || 1200),
++      temperature: Math.min(1.5, Math.max(0, Number(item.temperature) || 0.4)),
++    })) : [];
++    mutateDesk(desk => { desk.failover = next; });
++    return next;
++  });
++  // upstream-pool: kommt aus fr-gateway (panel /api/upstreams)
++  ipcMain.handle('upstreams:list', async () => {
++    try {
++      const res = await fetch('http://127.0.0.1:8090/api/upstreams');
++      if (!res.ok) throw new Error('panel http ' + res.status);
++      return await res.json();
++    } catch (e) {
++      return { upstreams: [], error: e.message };
++    }
++  });
++
++  // tasks: SQLite-Queue fuer die Rollen-Kommunikation
++  function requireQueue() {
++    if (!queue) throw new Error('task-queue nicht verfuegbar (sqlite)');
++    return queue;
++  }
++  ipcMain.handle('tasks:enqueue', async (_e, task) => {
++    try {
++      const created = await requireQueue().enqueue(task);
++      const denied = created && created.task && created.task.state === 'failed';
++      return Object.assign({ ok: !denied, code: denied ? 'UNAUTHORIZED' : null }, created);
++    } catch (err) {
++      return { ok: false, error: err.message, code: err.code || 'TASK_ERROR' };
++    }
++  });
++  ipcMain.handle('tasks:claim', async (_e, roleId) => {
++    try {
++      return { ok: true, task: await requireQueue().claimNextTask(roleId) };
++    } catch (err) {
++      return { ok: false, error: err.message, task: null };
++    }
++  });
++  ipcMain.handle('tasks:state', async (_e, payload) => {
++    try {
++      const p = payload || {};
++      return { ok: true, task: await requireQueue().updateState(p.taskId, p.state, p) };
++    } catch (err) {
++      return { ok: false, error: err.message, code: err.code || 'TASK_ERROR', task: null };
++    }
++  });
++  ipcMain.handle('tasks:list', async (_e, filter) => {
++    try {
++      return { ok: true, tasks: await requireQueue().listTasks(filter) };
++    } catch (err) {
++      return { ok: false, error: err.message, tasks: [] };
++    }
++  });
++  ipcMain.handle('tasks:events', async (_e, taskId) => {
++    try {
++      return { ok: true, events: await requireQueue().events(taskId) };
++    } catch (err) {
++      return { ok: false, error: err.message, events: [] };
++    }
++  });
++  ipcMain.handle('tasks:stats', async () => {
++    try {
++      return { ok: true, counts: await requireQueue().countByState() };
++    } catch (err) {
++      return { ok: false, error: err.message, counts: [] };
++    }
++  });
++
++  function pingModel(info, model) {
++    return new Promise(resolve => {
++      const body = JSON.stringify({
++        model,
++        messages: [{ role: 'user', content: 'ping' }],
++        max_tokens: 4,
++        stream: false,
++      });
++      const started = Date.now();
++      const req = http.request({
++        host: '127.0.0.1',
++        port: info.port,
++        path: '/v1/chat/completions',
++        method: 'POST',
++        headers: {
++          Authorization: 'Bearer ' + info.token,
++          'Content-Type': 'application/json',
++          'Content-Length': Buffer.byteLength(body),
++        },
++        timeout: 12000,
++      }, res => {
++        let out = '';
++        res.on('data', c => { out += c; });
++        res.on('end', () => {
++          const ms = Date.now() - started;
++          if (res.statusCode === 200) {
++            resolve({ model, ok: true, ms });
++          } else {
++            let msg = out.slice(0, 120);
++            try { const j = JSON.parse(out); if (j.error) msg = j.error.message || JSON.stringify(j.error); } catch (e) {}
++            resolve({ model, ok: false, ms, error: msg });
++          }
++        });
++      });
++      req.on('timeout', () => { req.destroy(new Error('timeout')); resolve({ model, ok: false, ms: 12000, error: 'Zeit├╝berschreitung' }); });
++      req.on('error', err => resolve({ model, ok: false, ms: Date.now() - started, error: err.message }));
++      req.write(body);
++      req.end();
++    });
++  }
++
++  async function pingAll(info, models) {
++    const out = [];
++    const concurrency = 3;
++    let i = 0;
++    async function worker() {
++      while (i < models.length) {
++        const model = models[i++];
++        out.push(await pingModel(info, model));
++      }
++    }
++    const workers = [];
++    for (let w = 0; w < Math.min(concurrency, models.length); w++) workers.push(worker());
++    await Promise.all(workers);
++    return out;
++  }
++
++  ipcMain.handle('prefs:check', async () => {
++    const info = claudeInfo();
++    if (!info.ok) return { ok: false, error: info.error };
++    const ids = await new Promise(resolve => {
++      http.get({
++        host: '127.0.0.1',
++        port: info.port,
++        path: '/v1/models',
++        headers: { Authorization: 'Bearer ' + info.token },
++        timeout: 15000,
++      }, res => {
++        let body = '';
++        res.on('data', c => { body += c; });
++        res.on('end', () => {
++          if (res.statusCode !== 200) {
++            let msg = body.slice(0, 200);
++            try { const j = JSON.parse(body); if (j.error) msg = j.error.message || JSON.stringify(j.error); } catch (e) {}
++            return resolve({ error: msg });
++          }
++          try { resolve({ ids: (JSON.parse(body).data || []).map(m => m.id) }); }
++          catch (e) { resolve({ error: 'Antwort nicht lesbar: ' + e.message }); }
++        });
++      }).on('error', err => resolve({ error: err.message }));
++    });
++    if (ids.error) return { ok: false, error: ids.error };
++    // Nur das eigene Familien-Modell pr├╝fen. Weitere verf├╝gbare Modelle z├ñhlen nicht.
++    const own = ownModels(ids.ids);
++    if (!own.length) {
++      return { ok: false, error: 'Modell ' + FAMILY_MODEL + ' nicht verf├╝gbar', expected: FAMILY_MODEL, models: [] };
++    }
++    const pings = await pingAll(info, own);
++    const okCount = pings.filter(p => p.ok).length;
++    return { ok: true, models: own, expected: FAMILY_MODEL, pings, okCount, total: pings.length };
++  });
++
++  ipcMain.handle('spaces:list', () => loadDesk().spaces);
++  ipcMain.handle('spaces:save', (_e, item) => {
++    let saved = [];
++    mutateDesk(desk => {
++      const spaces = desk.spaces.filter(s => s && s.id !== item.id);
++      spaces.unshift(item);
++      desk.spaces = spaces.slice(0, 40);
++      saved = desk.spaces;
++    });
++    return saved;
++  });
++
++  // Rollen inkl. zugewiesenem Key/Port (fuer die Anzeige im UI)
++  function rolesWithKeyInfo() {
++    const desk = loadDesk();
++    const reg = loadRegistry();
++    const keys = Array.isArray(desk.keys) ? desk.keys : [];
++    return (desk.roles || []).map(role => {
++      const key = keys.find(k => k && k.assignedToRole === role.id);
++      const entry = key ? reg.find(e => e && Number(e.nr) === Number(key.nr)) : null;
++      return Object.assign({}, role, {
++        keyInfo: key ? {
++          id: key.id,
++          masked: maskKey(entry ? entry.unique_key : ''),
++          port: key.port || (entry && entry.port) || null,
++        } : null,
++      });
++    });
++  }
++
++  ipcMain.handle('roles:list', () => rolesWithKeyInfo());
++  ipcMain.handle('roles:save', (_e, item) => {
++    let saved = [];
++    mutateDesk(desk => {
++      const roles = desk.roles.filter(r => r && r.id !== item.id);
++      roles.unshift(item);
++      desk.roles = roles.slice(0, 40);
++      saved = desk.roles;
++    }).then(() => { if (queue) queue.setPolicy(loadDesk().roles || []).catch(() => {}); });
++    return saved;
++  });
++  ipcMain.handle('roles:create', (_e, input) => {
++    try {
++      let created = null;
++      mutateDesk(desk => {
++        created = taskqueue.createRole(desk, loadRegistry(), input || {});
++      }).then(() => { if (queue) queue.setPolicy(loadDesk().roles || []).catch(() => {}); });
++      // UI-Felder ergaenzen, damit die bestehende Rollen-Ansicht weiter funktioniert
++      const uiRole = Object.assign({
++        mandate: '', voice: '', bounds: '', skills: [], tasks: [], automations: [],
++        workPath: '', workLocked: false, rolePath: '', rolePathLocked: false, alive: false, thread: [],
++      }, created.role, {
++        keyInfo: created.key ? { id: created.key.id, masked: created.key.masked, port: created.key.port } : null,
++      });
++      return { ok: true, role: uiRole, key: created.key };
++    } catch (err) {
++      return { ok: false, error: err.message };
++    }
++  });
++  ipcMain.handle('orchestrator:status', () => (orchestrator ? orchestrator.status() : []));
++
++  ipcMain.handle('chat:stop', (_e, payload) => {
++    const ctrl = streams.get(payload && payload.key);
++    if (ctrl) { ctrl.abort(); streams.delete(payload.key); }
++    return { ok: true };
++  });
++
++  ipcMain.handle('team:info', () => {
++    const P = teamEnv(/astra/i);
++    const R = teamEnv(/claude|opus/i);
++    return {
++      planner: P ? { ok: true, nr: P.nr, port: P.port, family: P.model_family || 'astra', model: 'gpt-6-astra', masked: maskKey(P.unique_key) } : { ok: false, error: 'Astra-Eintrag fehlt' },
++      reviewer: R ? { ok: true, nr: R.nr, port: R.port, family: R.model_family || 'opus', model: 'claude-opus-5.5', masked: maskKey(R.unique_key) } : { ok: false, error: 'Opus-Eintrag fehlt' },
++    };
++  });
++
++  ipcMain.handle('team:send', (event, payload) => {
++    const task = String((payload && payload.task) || '').trim();
++    if (!task) return { error: 'keine Aufgabe' };
++    const rounds = Math.min(Math.max(Number((payload && payload.rounds) || 3), 1), 5);
++    const P = teamEnv(/astra/i);
++    const R = teamEnv(/claude|opus/i);
++    if (!P) return { error: 'Astra-Gateway-Eintrag fehlt (Registry?)' };
++    if (!R) return { error: 'Opus-Gateway-Eintrag fehlt (Registry?)' };
++    const win = BrowserWindow.fromWebContents(event.sender);
++    const send = (ch, d) => { if (win && !win.isDestroyed()) win.webContents.send(ch, d); };
++    const key = 'team_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
++    const ctrl = new AbortController();
++    teams.set(key, ctrl);
++
++    (async () => {
++      try {
++        let feedback = '';
++        let final = null;
++        for (let r = 1; r <= rounds; r++) {
++          if (ctrl.signal.aborted) return;
++          const sysP = 'Du bist der Planer in einem Zwei-Modell-Team. Erarbeite einen pr├ñzisen Entwurf f├╝r die Aufgabe. Antworte auf Deutsch.';
++          const usrP = 'Aufgabe: ' + task + (feedback ? '\n\nFeedback des Pr├╝fers:\n' + feedback : '');
++          const draft = await gwOnce(P, 'gpt-6-astra', sysP, usrP);
++          if (draft.error) { send('team:error', { key, error: draft.error }); return; }
++          const sysR = 'Du bist der Pr├╝fer/Kritiker. Pr├╝fe den Entwurf kritisch und gib konkretes, kurzes Verbesserungsfeedback. Wenn er gut genug ist, antworte nur mit: AKZEPTIERT';
++          const usrR = 'Entwurf:\n' + draft.text;
++          const rev = await gwOnce(R, 'claude-opus-5.5', sysR, usrR);
++          if (rev.error) { send('team:error', { key, error: rev.error }); return; }
++          const accepted = /akzeptiert/i.test(rev.text);
++          send('team:round', { key, round: r, rounds, planner: draft.text, reviewer: rev.text, accepted });
++          feedback = rev.text;
++          if (accepted) { final = { round: r, accepted: true }; break; }
++        }
++        send('team:done', { key, final: final || { round: rounds, accepted: false } });
++      } finally {
++        teams.delete(key);
++      }
++    })();
++
++    return { ok: true, key };
++  });
++
++  ipcMain.handle('team:stop', (_e, payload) => {
++    const ctrl = teams.get(payload && payload.key);
++    if (ctrl) { ctrl.abort(); teams.delete(payload.key); }
++    return { ok: true };
++  });
++}
++
++// ---------------------------------------------------------------------------
++// Lifecycle
++// ---------------------------------------------------------------------------
++// ---------------------------------------------------------------------------
++// Task-Queue + desk.json-v2 (Runtime-Store ist SQLite, desk bleibt statisch)
++// ---------------------------------------------------------------------------
++let queue = null;
++let broadcaster = null;
++let orchestrator = null;
++
++function broadcastToWindows(channel, payload) {
++  BrowserWindow.getAllWindows().forEach(win => {
++    if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
++  });
++}
++
++// --live-test: headless Zwei-Agenten-Lauf ohne GUI. Beweist die Kette
++// Boss -> delegate -> Sub -> ToolRunner -> child_result -> Boss -> done.
++// Der Transport ist gescriptet (der Upstream liefert aktuell 429); mit
++// LIVE_TEST_TRANSPORT=real wird der echte Gateway-Chat benutzt.
++async function runLiveTest() {
++  const seconds = Math.max(5, Number(process.env.LIVE_TEST_SECONDS) || 60);
++  const useReal = String(process.env.LIVE_TEST_TRANSPORT || 'scripted') === 'real';
++  console.log('[live-test] modus: ' + (useReal ? 'real (gateway)' : 'scripted (deterministisch)') + ' | dauer: ' + seconds + 's');
++
++  // desk.json validieren/migrieren
++  try {
++    const raw = fs.existsSync(DESK_FILE) ? JSON.parse(fs.readFileSync(DESK_FILE, 'utf8')) : {};
++    const { desk, migrated } = taskqueue.migrateDesk(raw, {});
++    console.log('[live-test] desk-check: raw-rollen=' + ((raw.roles || []).length) + ' migrated=' + migrated + ' ziel-rollen=' + desk.roles.length);
++    if (migrated) deskWriter.save(desk);
++  } catch (err) {
++    console.error('[live-test] desk.json ungueltig: ' + err.message);
++    app.exit(1);
++    return;
++  }
++
++  const deskRoles = loadDesk().roles || [];
++  if (!deskRoles.length) {
++    console.error('[live-test] desk.json enthaelt keine Rollen - bitte zuerst: node scripts/seed-live-test.js');
++    app.exit(1);
++    return;
++  }
++  console.log('[live-test] desk-rollen: ' + deskRoles.map(r => r.id).join(', '));
++
++  let client = null;
++  let orch = null;
++  try {
++    const dbFile = path.join(app.getPath('userData'), 'astra-tasks.sqlite');
++    client = new QueueClient(dbFile);
++    client.onStatus(status => console.log('[live-test] queue ' + status.state));
++    await client.ready(20000);
++    await client.setPolicy(loadDesk().roles || []);
++
++    orch = new taskqueue.Orchestrator({
++      deskStore: { load: loadDesk, save: saveDesk, mutate: mutateDesk },
++      registryStore: { load: loadRegistry },
++      queue: client,
++      policy: taskqueue.createPolicy(() => loadDesk().roles || []),
++      transport: useReal ? createRoleChat({ logger: console }) : scriptedTransport(),
++      pollMs: 250,
++      synthMs: 5000,
++      logger: console,
++    });
++    const booted = orch.startAll();
++    console.log('[live-test] rollen: ' + booted.started + '/' + booted.total);
++    console.log('[live-test] laeuft ...');
++
++    await new Promise(resolve => setTimeout(resolve, seconds * 1000));
++
++    const tasks = await client.listTasks({ limit: 100 });
++    const counts = {};
++    tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
++    console.log('[live-test] task-status: ' + JSON.stringify(counts));
++    tasks.filter(t => String(t.request_id || '').startsWith('live-test-')).forEach(t => {
++      const result = t.result && typeof t.result === 'object' ? JSON.stringify(t.result).slice(0, 200) : String(t.result || '');
++      console.log('[live-test] ' + t.request_id + ' -> ' + t.state + (result ? ' | ' + result : ''));
++    });
++
++    const sub = (loadDesk().roles || []).find(r => r && r.id === 'sub_opus');
++    if (sub && sub.workspace) {
++      const script = path.join(sub.workspace, 'hallo.py');
++      if (fs.existsSync(script)) {
++        console.log('[live-test] hallo.py: ' + JSON.stringify(fs.readFileSync(script, 'utf8')));
++      } else {
++        console.log('[live-test] hallo.py fehlt in ' + sub.workspace);
++      }
++    }
++  } catch (err) {
++    console.error('[live-test] fehler: ' + err.message);
++    process.exitCode = 1;
++  } finally {
++    try { if (orch) orch.stopAll(); } catch (e) { /* egal */ }
++    try { if (client) client.close(); } catch (e) { /* egal */ }
++    app.exit(process.exitCode || 0);
++  }
++}
++
++function initDeskAndQueue() {
++  // desk.json auf v2 heben (Rollen-Registry mit Hierarchie/Keys)
++  try {
++    const raw = fs.existsSync(DESK_FILE) ? JSON.parse(fs.readFileSync(DESK_FILE, 'utf8')) : {};
++    const { desk, migrated } = taskqueue.migrateDesk(raw, {});
++    if (migrated) {
++      deskWriter.save(desk);
++      console.log('[desk] auf v3 migriert (' + desk.roles.length + ' Rollen, Graph-Modell)');
++    }
++  } catch (err) {
++    console.error('[desk] migration fehlgeschlagen:', err.message);
++  }
++
++  // SQLite-Queue laeuft in einem eigenen Node-Prozess (better-sqlite3 ist
++  // im Electron-33-Main-Prozess nicht lauffaehig -> harter Crash beim Open).
++  return (async () => {
++    try {
++      const dbFile = path.join(app.getPath('userData'), 'astra-tasks.sqlite');
++      const client = new QueueClient(dbFile);
++      client.onStatus(status => {
++        broadcastToWindows('queue:status', status);
++        console.log('[tasks] queue ' + status.state + (status.candidate ? ' via ' + status.candidate : '') +
++          (status.error ? ' (' + status.error + ')' : ''));
++      });
++      await client.ready(20000);
++      queue = client;
++      // Graph-Berechtigungen in den Worker spiegeln
++      await client.setPolicy(loadDesk().roles || []);
++      console.log('[tasks] sqlite-store bereit: ' + dbFile);
++
++      // Live-Stream: neue task_events -> 'task:event' an alle Fenster
++      broadcaster = new TaskBroadcaster({
++        queue: client,
++        send: broadcastToWindows,
++        intervalMs: 1000,
++      });
++      broadcaster.start();
++      console.log('[tasks] live-stream aktiv (task:event)');
++
++      // Orchestrator: aktive Rollen aus der desk.json -> AgentRuntime je Rolle
++      try {
++        // Transport fuer den Agent-Graphen: Stub (deterministisch) oder echtes LLM.
++        // Default ist stub, weil der Upstream aktuell 429 liefert (der Gateway
++        // antwortet dann nur mit dem Light-Upstream ohne Tool-Calls). Mit
++        // ASTRA_TRANSPORT=real wird der echte Gateway-Chat benutzt.
++        const transportMode = String(process.env.ASTRA_TRANSPORT || 'stub').toLowerCase();
++        let agentTransport;
++        if (transportMode === 'real') {
++          agentTransport = createRoleChat({ logger: console });
++          console.log('[orchestrator] transport: real (fr-gateway)');
++        } else {
++          agentTransport = liveStubTransport({
++            log: msg => console.log(msg),
++            roles: () => loadDesk().roles || [],
++          });
++          console.log('[orchestrator] transport: stub (deterministisch) - ASTRA_TRANSPORT=real fuer echtes LLM');
++        }
++        orchestrator = new taskqueue.Orchestrator({
++          deskStore: { load: loadDesk, save: saveDesk, mutate: mutateDesk },
++          registryStore: { load: loadRegistry },
++          queue: client,
++          policy: taskqueue.createPolicy(() => loadDesk().roles || []),
++          synthMs: 30000,
++          transport: agentTransport,
++          pollMs: 1000,
++        });
++        const booted = orchestrator.startAll();
++        console.log('[orchestrator] ' + booted.started + '/' + booted.total + ' rollen aktiv');
++        console.log('[orchestrator] synthesizer aktiv (30s)');
++      } catch (err) {
++        orchestrator = null;
++        console.error('[orchestrator] start fehlgeschlagen:', err.message);
++      }
++    } catch (err) {
++      queue = null;
++      console.error('[tasks] sqlite nicht verfuegbar:', err.message);
++    }
++  })();
++}
++
++app.whenReady().then(async () => {
++  if (process.argv.includes('--live-test')) {
++    await runLiveTest();
++    return;
++  }
++  registerIpc();
++  await initDeskAndQueue();
++  const win = createWindow();
++
++  if (process.argv.includes('--smoke')) {
++    console.log('[smoke] boot: ' + new Date().toISOString());
++    console.log('[smoke] claude: ' + JSON.stringify(publicClaude(claudeInfo())));
++    win.webContents.on('console-message', (_e, level, message) => {
++      console.log('[renderer:' + level + '] ' + message);
++    });
++    win.webContents.on('did-fail-load', (_e, code, desc, url) => {
++      console.log('[fail-load] ' + code + ' ' + desc + ' ' + url);
++    });
++    win.webContents.on('did-finish-load', () => {
++      console.log('[smoke] did-finish-load: ' + new Date().toISOString());
++      win.webContents.executeJavaScript('document.title').then(t => {
++        console.log('[smoke] title: ' + t);
++      });
++    });
++    await new Promise(r => setTimeout(r, 10000));
++    console.log('[smoke] quit');
++    app.quit();
++    return;
++  }
++
++  app.on('activate', () => {
++    if (BrowserWindow.getAllWindows().length === 0) createWindow();
++  });
++});
++
++app.on('window-all-closed', () => {
++  if (process.platform !== 'darwin') app.quit();
++});
++
++app.on('before-quit', () => {
++  try {
++    for (const ctrl of streams.values()) {
++      try { ctrl.abort(); } catch (_) { /* ignore */ }
++    }
++    streams.clear();
++  } catch (e) { /* ignore */ }
++  try {
++    for (const ctrl of teams.values()) {
++      try { ctrl.abort(); } catch (_) { /* ignore */ }
++    }
++    teams.clear();
++  } catch (e) { /* ignore */ }
++  try { if (orchestrator) orchestrator.stopAll(); } catch (e) {}
++  try { if (broadcaster) broadcaster.stop(); } catch (e) {}
++  try { if (queue && typeof queue.close === 'function') queue.close(); } catch (e) {}
++});
+diff --git a/harness-pro/taskqueue/runtime.js b/harness-pro/taskqueue/runtime.js
+new file mode 100644
+index 0000000..e929948
+--- /dev/null
++++ b/harness-pro/taskqueue/runtime.js
+@@ -0,0 +1,418 @@
++'use strict';
++// runtime.js ÔÇö AgentRuntime: eine Rolle pollt die Queue, fuehrt Tasks aus und
++// schreibt das Ergebnis (done/failed) inkl. Eltern-Benachrichtigung zurueck.
++// Mit workspace bekommt die Rolle Haende (ToolRunner) und kann Tools aufrufen.
++
++const { ToolRunner } = require('../lib/tool-runner');
++
++// Antwort eines Agenten kann ein Tool-Aufruf sein: {"tool":"read_file","args":{...}}
++function stripFences(text) {
++  const value = String(text || '').trim();
++  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(value);
++  return fenced ? fenced[1].trim() : value;
++}
++
++function parseToolCall(reply) {
++  const candidates = [];
++  if (typeof reply === 'string') candidates.push(reply);
++  // Transport liefert teils das bereits entpackte Objekt { tool, args }
++  if (reply && typeof reply === 'object' && typeof reply.tool === 'string') {
++    return { tool: reply.tool, args: reply.args || {} };
++  }
++  if (reply && typeof reply.content === 'string') candidates.push(reply.content);
++  if (reply && reply.result && typeof reply.result === 'object') {
++    if (typeof reply.result.text === 'string') candidates.push(reply.result.text);
++    if (typeof reply.result.tool === 'string') {
++      return { tool: reply.result.tool, args: reply.result.args || {} };
++    }
++  }
++  for (const raw of candidates) {
++    try {
++      const parsed = JSON.parse(stripFences(raw));
++      if (parsed && typeof parsed.tool === 'string') {
++        return { tool: parsed.tool, args: parsed.args || {} };
++      }
++    } catch (e) { /* kein Tool-Aufruf */ }
++  }
++  return null;
++}
++
++// ---------------------------------------------------------------------------
++// Self-Healing: Kind-Fehler (stderr) extrahieren und als Kontext aufbereiten.
++// Der Boss bekommt bei jedem Re-Claim die Kind-Ergebnisse inkl. error_history
++// und wird per Prompt dazu gezwungen, einen Fix-Task zu delegieren.
++// ---------------------------------------------------------------------------
++const SELF_HEAL_INSTRUCTION = 'Ein vorheriger Task ist fehlgeschlagen. Hier ist der stderr: ';
++const SELF_HEAL_ACTION = ' Delegiere einen Fix-Task an den Agenten, um das Problem zu beheben.';
++// Diagnose: ASTRA_DEBUG_RUNTIME=1 loggt jeden Tool-Aufruf (Start/Ende/Dauer).
++const TOOL_DEBUG = process.env.ASTRA_DEBUG_RUNTIME === '1';
++
++function childStderr(child) {
++  const c = child || {};
++  const history = Array.isArray(c.error_history) ? c.error_history : [];
++  for (const entry of history) {
++    if (entry && entry.stderr) return String(entry.stderr);
++  }
++  for (const entry of history) {
++    if (entry && entry.error) return String(entry.error);
++  }
++  if (c.result && typeof c.result === 'object') {
++    if (c.result.stderr) return String(c.result.stderr);
++    if (c.result.error) return String(c.result.error);
++  }
++  return '';
++}
++
++function failedChildResults(childResults) {
++  return (Array.isArray(childResults) ? childResults : [])
++    .filter(c => c && (c.state === 'failed' || c.state === 'escalated'));
++}
++
++function selfHealContext(childResults) {
++  const all = (Array.isArray(childResults) ? childResults : []).filter(Boolean);
++  if (!all.length) return null;
++  // Nur UNGELOESTE Fehler: ist das neueste Kind done, wurde der Fehler durch
++  // einen Fix-Task behoben -> keine weitere Fix-Delegation erzwingen.
++  const last = all[all.length - 1];
++  if (!last || (last.state !== 'failed' && last.state !== 'escalated')) return null;
++  const failed = all.filter(c => c && (c.state === 'failed' || c.state === 'escalated'));
++  const stderr = childStderr(last) || 'unbekannter Fehler (kein stderr)';
++  return {
++    required: true,
++    failed_children: failed.map(c => ({
++      id: c.id,
++      title: c.title,
++      state: c.state,
++      attempts: c.attempts,
++      error_history: c.error_history,
++    })),
++    stderr,
++    instruction: SELF_HEAL_INSTRUCTION + stderr + '.' + SELF_HEAL_ACTION,
++  };
++}
++
++// Finale Agenten-Antwort kann einen Fehlschlag explizit melden:
++// {"ok":false,"error":"..."} -> Task wird failed (statt faelschlich done).
++function explicitFailure(reply) {
++  if (!reply || typeof reply !== 'object') return null;
++  const payload = reply.result && typeof reply.result === 'object' ? reply.result : reply;
++  if (!payload || typeof payload !== 'object') return null;
++  if (payload.ok === false || payload.failed === true || payload.success === false) {
++    return { message: String(payload.error || payload.message || 'Agent meldet Fehlschlag') };
++  }
++  return null;
++}
++
++class AgentRuntime {
++  constructor(options) {
++    const o = options || {};
++    if (!o.queue) throw new Error('AgentRuntime: queue fehlt');
++    if (!o.roleId) throw new Error('AgentRuntime: roleId fehlt');
++    if (typeof o.chat !== 'function') throw new Error('AgentRuntime: chat-funktion fehlt');
++
++    this.queue = o.queue;
++    this.roleId = o.roleId;
++    this.model = o.model || 'astra';
++    this.chat = o.chat;
++    this.validator = o.validator || null;
++    this.policy = o.policy || null;
++    this.workspace = o.workspace || null;
++    this.toolRunner = this.workspace ? new ToolRunner(this.workspace) : null;
++    this.pollMs = Number(o.pollMs) || 1000;
++    this.logger = o.logger || console;
++    this.onDone = o.onDone || null;
++    this.onFailed = o.onFailed || null;
++
++    this.timer = null;
++    // Semaphore: hoechstens maxConcurrent Tasks gleichzeitig ausfuehren
++    this.maxConcurrent = Math.max(1, Number(o.maxConcurrent) || 2);
++    this.active = 0;
++    this._waiters = [];
++    this.stats = { claimed: 0, done: 0, failed: 0, toolCalls: 0, delegated: 0 };
++  }
++
++  start() {
++    if (this.timer) return this;
++    const every = Math.max(50, this.pollMs);
++    this.timer = setInterval(() => {
++      this.tick().catch(err => this.logger.error('[runtime ' + this.roleId + '] tick-fehler: ' + err.message));
++    }, every);
++    if (this.timer.unref) this.timer.unref();
++    // sofort einmal pollen
++    this.tick().catch(err => this.logger.error('[runtime ' + this.roleId + '] tick-fehler: ' + err.message));
++    return this;
++  }
++
++  stop() {
++    if (this.timer) {
++      clearInterval(this.timer);
++      this.timer = null;
++    }
++    return this;
++  }
++
++  // Semaphore: blockiert, bis ein Ausfuehrungs-Slot frei ist
++  _acquire() {
++    if (this.active < this.maxConcurrent) {
++      this.active += 1;
++      return Promise.resolve();
++    }
++    return new Promise(resolve => this._waiters.push(resolve)).then(() => { this.active += 1; });
++  }
++
++  _release() {
++    this.active = Math.max(0, this.active - 1);
++    const next = this._waiters.shift();
++    if (next) next();
++  }
++
++  // holt genau einen Task und fuehrt ihn aus
++  async tick() {
++    // kein unbegrenztes Warten ansammeln (Polling-Timer wuerde sonst auflaufen)
++    if (this._waiters.length >= this.maxConcurrent) return null;
++    await this._acquire();
++    try {
++      const task = await this.queue.claimNextTask(this.roleId);
++      if (!task) return null;
++      // Defense-in-depth: Quelle muss laut Graph berechtigt sein
++      if (this.policy && typeof this.policy.canReceive === 'function' &&
++          !this.policy.canReceive(this.roleId, task.source_role)) {
++        const failed = await this.queue.updateState(task.id, 'failed', {
++          error: 'UNAUTHORIZED: ' + task.source_role + ' darf nicht an ' + this.roleId + ' senden',
++          code: 'UNAUTHORIZED',
++        });
++        this.stats.failed += 1;
++        await this.notifyParent(failed);
++        return { ok: false, task: failed, error: new Error('UNAUTHORIZED') };
++      }
++      this.stats.claimed += 1;
++      return await this.execute(task);
++    } finally {
++      this._release();
++    }
++  }
++
++  async execute(task) {
++    // claimed -> running
++    let running;
++    try {
++      running = await this.queue.updateState(task.id, 'running', { message: 'claimed by ' + this.roleId });
++    } catch (err) {
++      this.logger.error('[runtime ' + this.roleId + '] running fehlgeschlagen: ' + err.message);
++      return { ok: false, task, error: err };
++    }
++
++    let result;
++    try {
++      // nach einem Delegations-Roundtrip liegen die Kind-Ergebnisse bereit.
++      // Wichtig fuer Self-Healing: inkl. error_history/stderr der Kinder laden.
++      let context = running;
++      if (typeof this.queue.listChildren === 'function') {
++        const children = await this.queue.listChildren(running.id);
++        const finished = children.filter(c => c.state === 'done' || c.state === 'failed' || c.state === 'escalated');
++        if (finished.length) {
++          const childResults = finished.map(c => ({
++            id: c.id,
++            title: c.title,
++            state: c.state,
++            attempts: c.attempts,
++            result: c.result,
++            error_history: c.error_history,
++            stderr: childStderr(c),
++          }));
++          context = Object.assign({}, running, { child_results: childResults });
++          const selfHeal = selfHealContext(childResults);
++          if (selfHeal) context.self_heal = selfHeal;
++        }
++      }
++      result = await this.chatWithTools(context);
++      if (result && result.__delegated) {
++        // Elternteil wartet auf das Kind; die Fortsetzung kommt beim Re-Claim
++        this.stats.delegated += 1;
++        return { ok: true, task: await this.queue.getTask(task.id), delegated: result.tool_result.childId };
++      }
++      if (this.validator) {
++        const valid = await this.validator(running, result);
++        if (valid === false) {
++          const err = new Error('schema-validierung fehlgeschlagen fuer "' + running.schema_name + '"');
++          err.code = 'SCHEMA_INVALID';
++          throw err;
++        }
++      }
++    } catch (err) {
++      // stderr des letzten fehlgeschlagenen Tool-Aufrufs in die Task-History
++      const toolResult = err && err.toolResult;
++      const stderr = toolResult && (toolResult.stderr || toolResult.error);
++      const failed = await this.queue.updateState(task.id, 'failed', {
++        error: err.message || String(err),
++        code: err.code || null,
++        stderr: stderr || undefined,
++        tool: toolResult && toolResult.tool,
++        exitCode: toolResult ? toolResult.exitCode : undefined,
++      });
++      this.stats.failed += 1;
++      await this.notifyParent(failed);
++      if (this.onFailed) this.onFailed(failed);
++      return { ok: false, task: failed, error: err };
++    }
++
++    const done = await this.queue.updateState(task.id, 'done', {
++      result,
++      message: 'done by ' + this.roleId,
++    });
++    this.stats.done += 1;
++    await this.notifyParent(done);
++    if (this.onDone) this.onDone(done);
++    return { ok: true, task: done };
++  }
++
++  /**
++   * chatWithTools(task, maxRounds = 5)
++   * Solange der Agent mit {"tool":...,"args":{...}} antwortet, fuehrt die Runtime
++   * das Tool aus und schickt das Ergebnis als tool_result zurueck. Nach
++   * maxRounds ohne finale Antwort bricht sie mit einem Fehler ab.
++   */
++  async chatWithTools(task, maxRounds) {
++    const limit = Math.max(1, Number(maxRounds) || 5);
++    let context = Object.assign({}, task);
++    let lastToolFailure = null;
++    for (let round = 0; round < limit; round += 1) {
++      if (TOOL_DEBUG) this.logger.log('[runtime ' + this.roleId + '] chat-start runde ' + (round + 1) + ' task=' + (task.title || ''));
++      const reply = await this.chat({ task: context, roleId: this.roleId, model: this.model });
++      if (TOOL_DEBUG) this.logger.log('[runtime ' + this.roleId + '] chat-ende runde ' + (round + 1));
++      const call = parseToolCall(reply);
++      if (!call) {
++        // expliziter Fehlschlag des Agenten -> Task failed (Self-Healing-Kette)
++        const failure = explicitFailure(reply);
++        if (failure) {
++          const err = new Error('AGENT_FAILED: ' + failure.message);
++          err.code = 'AGENT_FAILED';
++          if (lastToolFailure) err.toolResult = lastToolFailure;
++          throw err;
++        }
++        return reply;
++      }
++
++      // Delegation ist kein Datei-Tool: sie erzeugt einen Kind-Task und pausiert
++      // den Parent (waiting_on_child), bis das Kind fertig ist.
++      if (call.tool === 'delegate') {
++        const delegated = await this.delegateTask(call.args || {}, task);
++        this.stats.toolCalls += 1;
++        if (delegated.ok) return { __delegated: true, tool_result: delegated };
++        context = Object.assign({}, task, { tool_result: {
++          tool: 'delegate', ok: false, error: delegated.error,
++        }, previous_answer: reply });
++        continue;
++      }
++
++      if (!this.toolRunner) throw new Error('Tool-Aufruf ohne Workspace: ' + call.tool);
++
++      let toolResult;
++      const toolStarted = Date.now();
++      if (TOOL_DEBUG) {
++        this.logger.log('[runtime ' + this.roleId + '] tool-start ' + call.tool +
++          ' ' + JSON.stringify(call.args || {}).slice(0, 200));
++      }
++      try {
++        const output = await this.toolRunner.run(call.tool, call.args || {});
++        toolResult = { tool: call.tool, ok: true, output };
++        if (TOOL_DEBUG) {
++          this.logger.log('[runtime ' + this.roleId + '] tool-ende ' + call.tool +
++            ' ok=true dauer=' + (Date.now() - toolStarted) + 'ms');
++        }
++      } catch (err) {
++        // Fehler ist ein Ergebnis, kein Abbruch: der Agent bekommt ihn zurueck.
++        // stderr wird mitgeliefert, damit der Agent (und spaeter der Boss) den
++        // konkreten Fehler analysieren kann.
++        toolResult = {
++          tool: call.tool,
++          ok: false,
++          error: err.message || String(err),
++          stderr: err.stderr === undefined || err.stderr === null ? '' : String(err.stderr),
++          exitCode: err.exitCode === undefined ? null : err.exitCode,
++        };
++        if (!lastToolFailure) lastToolFailure = toolResult;
++        if (TOOL_DEBUG) {
++          this.logger.log('[runtime ' + this.roleId + '] tool-ende ' + call.tool +
++            ' ok=false dauer=' + (Date.now() - toolStarted) + 'ms error=' + (err.message || '').slice(0, 160));
++        }
++      }
++      this.stats.toolCalls += 1;
++      context = Object.assign({}, task, { tool_result: toolResult, previous_answer: reply });
++    }
++    const limitError = new Error('Tool-Loop-Limit erreicht');
++    limitError.code = 'TOOL_LOOP_LIMIT';
++    if (lastToolFailure) limitError.toolResult = lastToolFailure;
++    throw limitError;
++  }
++
++  // Task an Untergebenen/Peer delegieren (Delegation ist eine Graph-Kante,
++  // keine Datei-Operation). Erzeugt einen Kind-Task und pausiert den Parent.
++  async delegateTask(args, task) {
++    const a = args || {};
++    const target = String(a.role || a.target_role || '');
++    if (!target) return { ok: false, error: 'delegate: role fehlt' };
++    if (this.policy && typeof this.policy.canSend === 'function' &&
++        !this.policy.canSend(this.roleId, target)) {
++      return { ok: false, error: 'UNAUTHORIZED: ' + this.roleId + ' darf nicht an ' + target + ' delegieren' };
++    }
++    // Zuerst waiting_on_child, dann enqueue: sonst kann das Kind fertig sein,
++    // bevor der Parent wartet, und checkChildrenStatus no-opt -> Parent haengt.
++    await this.queue.updateState(task.id, 'waiting_on_child', {
++      message: 'delegiere an ' + target,
++    });
++    let created;
++    try {
++      created = await this.queue.enqueue({
++        type: 'request',
++        title: a.title || ('Delegiert: ' + (task.title || task.id)),
++        description: a.description || '',
++        schema_name: a.schema_name || 'delegated',
++        payload: a.payload === undefined ? {} : a.payload,
++        source_role: this.roleId,
++        target_role: target,
++        parent_id: task.id,
++        request_id: a.request_id || ('deleg-' + task.id + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)),
++        priority: Number(a.priority) || Number(task.priority) || 0,
++      });
++    } catch (err) {
++      try {
++        await this.queue.updateState(task.id, 'running', { message: 'delegation fehlgeschlagen' });
++      } catch (_) { /* Parent bleibt waiting; Watchdog raeumt auf */ }
++      throw err;
++    }
++    if (created && created.task && created.task.state === 'failed') {
++      try {
++        await this.queue.updateState(task.id, 'running', { message: 'delegation unauthorized' });
++      } catch (_) { /* ignore */ }
++      return { ok: false, error: 'UNAUTHORIZED: delegierter Task wurde abgelehnt' };
++    }
++    // Falls Kind schon fertig: Parent sofort wieder claimbar machen
++    try {
++      await this.queue.checkChildrenStatus(task.id);
++    } catch (_) { /* ignore */ }
++    return { ok: true, delegated: true, childId: created.task.id, target };
++  }
++
++  // Boss-Agent informieren: Eltern-Task zurueck auf running, wenn alle Kinder fertig sind
++  async notifyParent(task) {
++    if (!task || !task.parent_id) return null;
++    try {
++      return await this.queue.checkChildrenStatus(task.parent_id);
++    } catch (err) {
++      this.logger.error('[runtime ' + this.roleId + '] parent-callback fehlgeschlagen: ' + err.message);
++      return null;
++    }
++  }
++}
++
++module.exports = {
++  AgentRuntime,
++  parseToolCall,
++  childStderr,
++  failedChildResults,
++  selfHealContext,
++  explicitFailure,
++  SELF_HEAL_INSTRUCTION,
++  SELF_HEAL_ACTION,
++};
+diff --git a/harness-pro/taskqueue/synthesizer.js b/harness-pro/taskqueue/synthesizer.js
+new file mode 100644
+index 0000000..d485ea3
+--- /dev/null
++++ b/harness-pro/taskqueue/synthesizer.js
+@@ -0,0 +1,107 @@
++'use strict';
++// synthesizer.js ÔÇö Attention Economy: fasst die Ergebnisse der Kind-Tasks eines
++// Parents zu einem komprimierten report-Task zusammen, damit der Boss nicht im
++// Rauschen untergeht. Jeder Kind-Task wird nur einmal synthetisiert.
++
++function parseJson(value, fallback) {
++  if (value === null || value === undefined) return fallback;
++  if (typeof value === 'object') return value;
++  try {
++    return JSON.parse(value);
++  } catch (e) {
++    return fallback;
++  }
++}
++
++function unique(list) {
++  return Array.from(new Set(list.filter(Boolean)));
++}
++
++// Widerspruch: gleiche Aufgabe (title) mit unterschiedlichem Ergebnis
++function findContradictions(items) {
++  const byTitle = new Map();
++  items.forEach(item => {
++    const key = item.title || item.id;
++    if (!byTitle.has(key)) byTitle.set(key, []);
++    byTitle.get(key).push(item);
++  });
++  const out = [];
++  byTitle.forEach((group, title) => {
++    if (group.length < 2) return;
++    const variants = unique(group.map(item => JSON.stringify(item.result === undefined ? null : item.result)));
++    if (variants.length > 1) {
++      out.push({ title, results: variants.length, ids: group.map(item => item.id) });
++    }
++  });
++  return out;
++}
++
++// Payload-Form des Reports: total/done/failed/errors/results_summary
++function buildSummary(items) {
++  const errors = [];
++  items.forEach(item => {
++    (item.errors || []).forEach(entry => {
++      const text = entry && (entry.error || entry.message);
++      if (text) errors.push(String(text));
++    });
++  });
++  return {
++    total: items.length,
++    done: items.filter(item => item.state === 'done').length,
++    failed: items.filter(item => item.state === 'failed' || item.state === 'escalated').length,
++    errors: unique(errors).slice(0, 10),
++    results_summary: items.map(item => ({
++      id: item.id,
++      title: item.title,
++      state: item.state,
++      result: item.result === undefined ? null : item.result,
++    })),
++    contradictions: findContradictions(items),
++  };
++}
++
++/**
++ * synthesize(queue, parentRoleId) -> report-Task oder null
++ * Holt alle erledigten Kind-Tasks (done/failed/escalated) des Parents, die noch
++ * nicht synthetisiert wurden, fasst sie zusammen und legt einen report-Task an.
++ * Der periodische Aufruf kommt aus dem Orchestrator (alle 30 s, Rollen mit
++ * Untergebenen) ÔÇö das ist der Architektur-Trigger aus dem Auftrag.
++ */
++async function synthesize(queue, parentRoleId, options) {
++  const o = options || {};
++  if (!queue || typeof queue.listUnsynthizedChildren !== 'function') {
++    throw new Error('synthesize: queue unterstuetzt keine Synthese');
++  }
++  const rows = await queue.listUnsynthizedChildren(parentRoleId);
++  const items = (rows || []).map(row => ({
++    id: row.id,
++    title: row.title,
++    state: row.state,
++    result: parseJson(row.result, null),
++    errors: parseJson(row.error_history, []),
++  }));
++  if (!items.length) return null;
++
++  const ids = items.map(item => item.id);
++  // CAS zuerst: nur einer von parallelen Synthesizern "gewinnt" die IDs
++  const claimed = await queue.markSynthesized(ids);
++  if (!claimed) return null;
++
++  const summary = buildSummary(items);
++  const stableId = 'synth-' + parentRoleId + '-' + ids.slice().sort().join('_').slice(0, 96);
++  const { task } = await queue.enqueue({
++    type: 'report',
++    title: 'Synthese: ' + parentRoleId,
++    description: 'Zusammengefasster Status der Kind-Tasks',
++    schema_name: 'synthesizer_report',
++    payload: summary,
++    source_role: 'system',
++    target_role: parentRoleId,
++    request_id: o.requestId || stableId,
++    priority: 5,
++  });
++
++  return task;
++}
++
++module.exports = { synthesize, buildSummary, findContradictions };
+diff --git a/harness-pro/taskqueue/taskqueue.js b/harness-pro/taskqueue/taskqueue.js
+new file mode 100644
+index 0000000..c7a2f2a
+--- /dev/null
++++ b/harness-pro/taskqueue/taskqueue.js
+@@ -0,0 +1,531 @@
++'use strict';
++// taskqueue.js ÔÇö SQLite-Runtime-Store fuer Tasks (better-sqlite3).
++// desk.json bleibt statisch; hier liegen ausschliesslich Tasks, Status und Events.
++
++const fs = require('fs');
++const path = require('path');
++const crypto = require('crypto');
++const Database = require('better-sqlite3');
++
++const { assertTransition, isState, isTerminal, FsmError } = require('./fsm');
++
++const SCHEMA_FILE = path.join(__dirname, 'schema.sql');
++const MAX_ERROR_HISTORY = 10;
++const MAX_ERROR_STDERR = 8000;
++const DEFAULT_MAX_LOOPS = 10;
++const QUOTA_MAX_RETRIES = 5;
++const QUOTA_BASE_DELAY_MS = 60000;
++
++class TaskAuthorizationError extends Error {
++  constructor(message) {
++    super(message);
++    this.name = 'TaskAuthorizationError';
++    this.code = 'UNAUTHORIZED';
++  }
++}
++
++class TaskValidationError extends Error {
++  constructor(message) {
++    super(message);
++    this.name = 'TaskValidationError';
++    this.code = 'TASK_INVALID';
++  }
++}
++
++function parseJson(value, fallback) {
++  if (value == null || value === '') return fallback;
++  try {
++    return JSON.parse(value);
++  } catch (err) {
++    return fallback;
++  }
++}
++
++function toJson(value) {
++  if (typeof value === 'string') {
++    // Strings werden als JSON-Wert gespeichert, damit payload/result immer gueltiges JSON sind
++    return JSON.stringify(value);
++  }
++  return JSON.stringify(value === undefined ? null : value);
++}
++
++class TaskQueue {
++  constructor(dbFile, options) {
++    const opts = options || {};
++    this.validators = opts.validators || {};
++    this.policy = opts.policy || null;
++    this.dbFile = dbFile === ':memory:' ? ':memory:' : path.resolve(dbFile);
++    if (this.dbFile !== ':memory:') {
++      fs.mkdirSync(path.dirname(this.dbFile), { recursive: true });
++    }
++    this.db = new Database(this.dbFile);
++    this.db.pragma('journal_mode = WAL');
++    this.db.pragma('foreign_keys = ON');
++    this.db.pragma('busy_timeout = 5000');
++    this.db.exec(fs.readFileSync(SCHEMA_FILE, 'utf8'));
++    this.ensureColumns();
++    this.watchdogTimer = null;
++  }
++
++  // bestehende Datenbanken um neue Spalten erweitern (idempotent)
++  ensureColumns() {
++    const have = new Set(this.db.prepare('PRAGMA table_info(tasks)').all().map(c => c.name));
++    if (!have.has('claimed_by')) this.db.exec('ALTER TABLE tasks ADD COLUMN claimed_by TEXT');
++    if (!have.has('parent_id')) this.db.exec('ALTER TABLE tasks ADD COLUMN parent_id TEXT');
++    if (!have.has('synthesized')) this.db.exec('ALTER TABLE tasks ADD COLUMN synthesized INTEGER DEFAULT 0');
++    if (!have.has('retry_after')) this.db.exec('ALTER TABLE tasks ADD COLUMN retry_after DATETIME DEFAULT NULL');
++    this.db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
++  }
++
++  close() {
++    this.stopWatchdog();
++    if (this.db) {
++      this.db.close();
++      this.db = null;
++    }
++  }
++
++  // -------------------------------------------------------------------------
++  // enqueue: idempotent ueber request_id
++  // -------------------------------------------------------------------------
++  enqueue(task) {
++    if (!task || typeof task !== 'object') throw new TaskValidationError('task fehlt');
++    ['type', 'title', 'schema_name', 'source_role', 'target_role', 'request_id'].forEach(key => {
++      if (!task[key] || typeof task[key] !== 'string') {
++        throw new TaskValidationError('Feld "' + key + '" fehlt oder ist kein String');
++      }
++    });
++    if (task.payload === undefined) throw new TaskValidationError('Feld "payload" fehlt');
++    if (!isState(task.state || 'queued')) throw new TaskValidationError('unbekannter state');
++
++    const existing = this.findByRequestId(task.request_id);
++    if (existing) {
++      return { task: this.hydrate(existing), duplicate: true };
++    }
++
++    const id = task.id || crypto.randomUUID();
++    const denied = !!(this.policy && typeof this.policy.canSend === 'function' &&
++      !this.policy.canSend(task.source_role, task.target_role));
++    const now = new Date().toISOString();
++    const row = {
++      id,
++      type: task.type,
++      title: task.title,
++      description: task.description || null,
++      schema_name: task.schema_name,
++      payload: toJson(task.payload),
++      source_role: task.source_role,
++      target_role: task.target_role,
++      request_id: task.request_id,
++      priority: Math.min(9, Math.max(0, Number(task.priority) || 0)),
++      deadline: task.deadline || null,
++      acceptance_criteria: task.acceptance_criteria === undefined ? null : toJson(task.acceptance_criteria),
++      state: denied ? 'failed' : (task.state || 'queued'),
++      attempts: 0,
++      max_attempts: Number(task.max_attempts) || 2,
++      error_history: denied ? JSON.stringify([{ at: now, error: 'UNAUTHORIZED: ' + task.source_role + ' darf nicht an ' + task.target_role + ' senden', code: 'UNAUTHORIZED' }]) : '[]',
++      timeout_ms: Number(task.timeout_ms) || 120000,
++      claimed_by: null,
++      parent_id: task.parent_id || null,
++      result: null,
++      created_at: now,
++      updated_at: now,
++    };
++
++    try {
++      this.db.prepare(
++        'INSERT INTO tasks (id, type, title, description, schema_name, payload, source_role, target_role,' +
++        ' request_id, priority, deadline, acceptance_criteria, state, attempts, max_attempts, error_history,' +
++        ' timeout_ms, claimed_by, parent_id, result, created_at, updated_at)' +
++        ' VALUES (@id, @type, @title, @description, @schema_name, @payload, @source_role, @target_role,' +
++        ' @request_id, @priority, @deadline, @acceptance_criteria, @state, @attempts, @max_attempts,' +
++        ' @error_history, @timeout_ms, @claimed_by, @parent_id, @result, @created_at, @updated_at)'
++      ).run(row);
++    } catch (err) {
++      // parallel eingefuegte request_id: bestehenden Task zurueckgeben
++      if (String(err.code || '').indexOf('SQLITE_CONSTRAINT') === 0) {
++        const again = this.findByRequestId(task.request_id);
++        if (again) return { task: this.hydrate(again), duplicate: true };
++      }
++      throw err;
++    }
++
++    this.recordEvent(id, null, row.state, denied ? 'UNAUTHORIZED' : 'enqueued');
++    return { task: this.getTask(id), duplicate: false };
++  }
++
++  // -------------------------------------------------------------------------
++  // claimNextTask: atomar (BEGIN IMMEDIATE + UPDATE ... WHERE state='queued')
++  // -------------------------------------------------------------------------
++  claimNextTask(roleId) {
++    if (!roleId) throw new TaskValidationError('roleId fehlt');
++
++    const pick = this.db.prepare(
++      "SELECT id FROM tasks WHERE state = 'queued' AND target_role = ?" +
++      ' AND (retry_after IS NULL OR retry_after <= ?)' +
++      ' ORDER BY priority DESC, created_at ASC LIMIT 1'
++    );
++    const take = this.db.prepare(
++      "UPDATE tasks SET state = 'claimed', claimed_by = ?, attempts = attempts + 1, retry_after = NULL, updated_at = ?" +
++      " WHERE id = ? AND state = 'queued'"
++    );
++
++    const claim = this.db.transaction(() => {
++      for (let i = 0; i < 20; i += 1) {
++        const candidate = pick.get(roleId, new Date().toISOString());
++        if (!candidate) return null;
++        if (this.policy && typeof this.policy.canReceive === 'function') {
++          const src = this.db.prepare('SELECT source_role FROM tasks WHERE id = ?').get(candidate.id);
++          if (src && !this.policy.canReceive(roleId, src.source_role)) {
++            this.failUnauthorized(candidate.id, src.source_role, roleId);
++            continue;
++          }
++        }
++        const info = take.run(roleId, new Date().toISOString(), candidate.id);
++        if (info.changes === 1) {
++          this.recordEvent(candidate.id, 'queued', 'claimed', 'claimed by ' + roleId);
++          return this.getTask(candidate.id);
++        }
++      }
++      return null;
++    });
++
++    return claim.immediate();
++  }
++
++  // -------------------------------------------------------------------------
++  // updateState: FSM-Pruefung + Event-Log
++  // -------------------------------------------------------------------------
++  updateState(taskId, newState, options) {
++    const opts = options || {};
++    const task = this.getTask(taskId);
++    if (!task) throw new TaskValidationError('task nicht gefunden: ' + taskId);
++
++    // Quota-Fehler: zurueck in die Queue statt failed
++    if (newState === 'failed' && this.isQuotaError(opts)) {
++      const retried = this.applyQuotaBackoff(task, opts);
++      if (retried) return retried;
++    }
++
++    assertTransition(task.state, newState);
++
++    // failed -> queued nur solange Versuche uebrig sind
++    if (task.state === 'failed' && newState === 'queued' && task.attempts >= task.max_attempts) {
++      throw new FsmError('failed', 'queued', 'max_attempts erreicht, stattdessen "escalated"');
++    }
++
++    let resultJson = null;
++    if (newState === 'done') {
++      if (opts.result === undefined) throw new TaskValidationError('done erfordert ein valides result');
++      const validator = this.validators[task.schema_name];
++      if (typeof validator === 'function') {
++        const ok = validator(opts.result, task);
++        if (ok === false) throw new TaskValidationError('result entspricht nicht schema "' + task.schema_name + '"');
++      }
++      resultJson = toJson(opts.result);
++    }
++
++    const errorHistory = Array.isArray(task.error_history) ? task.error_history.slice() : [];
++    const now = new Date().toISOString();
++    if (newState === 'failed') {
++      const msg = opts.error || opts.message || 'unbekannter Fehler';
++      const entry = { at: now, error: String(msg), code: opts.code || null };
++      // Self-Healing: den stderr des fehlgeschlagenen Tool-Aufrufs mitschreiben,
++      // damit der Boss (Eltern-Task) den Fehler analysieren und einen Fix-Task
++      // delegieren kann.
++      const stderr = opts.stderr === undefined || opts.stderr === null ? '' : String(opts.stderr);
++      if (stderr) entry.stderr = stderr.slice(0, MAX_ERROR_STDERR);
++      if (opts.tool) entry.tool = String(opts.tool);
++      if (opts.exitCode !== undefined && opts.exitCode !== null) entry.exitCode = opts.exitCode;
++      errorHistory.unshift(entry);
++      while (errorHistory.length > MAX_ERROR_HISTORY) errorHistory.pop();
++    }
++
++    // claimed_by nur beim Zurueckstellen in die Queue loeschen; sonst bleibt der Agent vermerkt
++    const expectedState = task.state;
++    const clearClaim = (expectedState === 'failed' || expectedState === 'waiting_on_child') && newState === 'queued';
++    const apply = this.db.transaction(() => {
++      let info;
++      if (clearClaim) {
++        info = this.db.prepare(
++          'UPDATE tasks SET state = ?, result = COALESCE(?, result), error_history = ?, claimed_by = NULL, updated_at = ? WHERE id = ? AND state = ?'
++        ).run(newState, resultJson, JSON.stringify(errorHistory), now, taskId, expectedState);
++      } else {
++        info = this.db.prepare(
++          'UPDATE tasks SET state = ?, result = COALESCE(?, result), error_history = ?, updated_at = ? WHERE id = ? AND state = ?'
++        ).run(newState, resultJson, JSON.stringify(errorHistory), now, taskId, expectedState);
++      }
++      if (info.changes !== 1) {
++        throw new TaskValidationError(
++          'state-Konflikt: Task ' + taskId + ' nicht mehr in "' + expectedState + '" (CAS)'
++        );
++      }
++      this.recordEvent(taskId, expectedState, newState, opts.message || null);
++      return this.getTask(taskId);
++    });
++
++    return apply.immediate();
++  }
++
++  // 429/Quota: kein finaler Fehlschlag, sondern spaeter erneut versuchen.
++  // attempts bleibt unveraendert, retry_after bekommt exponentielles Backoff.
++  isQuotaError(opts) {
++    const o = opts || {};
++    const code = String(o.code || '');
++    const text = String(o.error || o.message || '');
++    if (code === '429' || code === 'QUOTA_EXCEEDED') return true;
++    return /(^|\D)429(\D|$)|quota|FreeUsageLimit|rate.?limit/i.test(code + ' ' + text);
++  }
++
++  applyQuotaBackoff(task, opts) {
++    const history = Array.isArray(task.error_history) ? task.error_history.slice() : [];
++    const retries = history.filter(e => e && (String(e.code) === '429' || String(e.code) === 'QUOTA_EXCEEDED')).length;
++    if (retries >= QUOTA_MAX_RETRIES) return null; // Budget aufgebraucht -> normaler Fehlschlag
++    const delayMs = QUOTA_BASE_DELAY_MS * Math.pow(2, retries);
++    const now = new Date();
++    history.unshift({ at: now.toISOString(), error: String(opts.error || opts.message || 'HTTP 429'), code: '429' });
++    while (history.length > MAX_ERROR_HISTORY) history.pop();
++    const info = this.db.prepare(
++      "UPDATE tasks SET state = 'queued', retry_after = ?, error_history = ?, claimed_by = NULL, updated_at = ? WHERE id = ? AND state = ?"
++    ).run(
++      new Date(now.getTime() + delayMs).toISOString(),
++      JSON.stringify(history),
++      now.toISOString(),
++      task.id,
++      task.state,
++    );
++    if (info.changes !== 1) {
++      throw new TaskValidationError(
++        'state-Konflikt: Quota-Backoff fuer ' + task.id + ' (nicht mehr in "' + task.state + '")'
++      );
++    }
++    this.recordEvent(task.id, task.state, 'queued', 'QUOTA-Backoff ' + Math.round(delayMs / 1000) + 's (429)');
++    return this.getTask(task.id);
++  }
++  // unerlaubte Quelle: Task endgueltig ablehnen (Code UNAUTHORIZED)
++  failUnauthorized(taskId, sourceRole, roleId) {
++    const now = new Date().toISOString();
++    const history = JSON.stringify([{ at: now, error: 'UNAUTHORIZED: ' + sourceRole + ' darf nicht an ' + roleId + ' senden', code: 'UNAUTHORIZED' }]);
++    this.db.prepare("UPDATE tasks SET state = 'failed', error_history = ?, updated_at = ? WHERE id = ?").run(history, now, taskId);
++    this.recordEvent(taskId, 'queued', 'failed', 'UNAUTHORIZED');
++  }
++
++  // alle Kind-Tasks eines Parents (jeder Zustand)
++  listChildren(parentId) {
++    if (!parentId) return [];
++    return this.db.prepare('SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at').all(parentId).map(row => this.hydrate(row));
++  }
++
++  // Kind-Tasks, die fertig sind (done/failed/escalated) und noch nicht
++  // synthetisiert wurden. Der Aufruf kommt periodisch aus dem Orchestrator.
++  listUnsynthizedChildren(parentId) {
++    if (!parentId) return [];
++    return this.db.prepare(
++      "SELECT * FROM tasks WHERE parent_id = ? AND state IN ('done', 'failed', 'escalated') AND COALESCE(synthesized, 0) = 0 ORDER BY created_at"
++    ).all(parentId).map(row => this.hydrate(row));
++  }
++
++  markSynthesized(ids) {
++    const list = Array.isArray(ids) ? ids : [];
++    if (!list.length) return 0;
++    // CAS: nur markieren wenn noch nicht synthetisiert (verhindert Doppel-Reports)
++    const stmt = this.db.prepare(
++      'UPDATE tasks SET synthesized = 1, updated_at = ? WHERE id = ? AND COALESCE(synthesized, 0) = 0'
++    );
++    const now = new Date().toISOString();
++    let changed = 0;
++    this.db.transaction(() => {
++      list.forEach(id => { changed += stmt.run(now, id).changes; });
++    })();
++    return changed;
++  }
++
++  // -------------------------------------------------------------------------
++  // Eltern-Task: wieder auf running, sobald alle Kinder fertig sind
++  // -------------------------------------------------------------------------
++  checkChildrenStatus(parentId) {
++    if (!parentId) return null;
++    const parent = this.getTask(parentId);
++    if (!parent) return null;
++    const children = this.db.prepare('SELECT state FROM tasks WHERE parent_id = ?').all(parentId);
++    if (!children.length) return null;
++
++    const finished = state => state === 'done' || state === 'cancelled' || state === 'failed' || state === 'escalated';
++    const allFinished = children.every(c => finished(c.state));
++    if (!allFinished) return parent;
++    if (parent.state !== 'waiting_on_child') return parent;
++
++    const failedChildren = children.filter(c => c.state === 'failed' || c.state === 'escalated');
++    // Self-Healing-Loop-Schutz: max_loops kommt aus dem Master-Payload
++    // (Default 10). Zu viele fehlgeschlagene Kinder -> Parent endgueltig failed.
++    const maxLoops = Number(parent.payload && parent.payload.max_loops) > 0
++      ? Number(parent.payload.max_loops)
++      : DEFAULT_MAX_LOOPS;
++    if (failedChildren.length >= maxLoops) {
++      return this.updateState(parentId, 'failed', {
++        error: 'LOOP_LIMIT: ' + failedChildren.length + ' fehlgeschlagene Kinder (max_loops=' + maxLoops + ')',
++        code: 'LOOP_LIMIT',
++      });
++    }
++
++    // Kind(er) fehlgeschlagen -> Parent wieder claimbar machen. Die Runtime
++    // laedt beim Re-Claim die Kind-Ergebnisse inkl. error_history/stderr und
++    // erzwingt ueber den Self-Healing-Prompt einen Fix-Task.
++    const message = failedChildren.length
++      ? 'self-heal: ' + failedChildren.length + '/' + children.length + ' kinder fehlgeschlagen'
++      : 'alle kinder fertig (' + children.length + ')';
++    return this.updateState(parentId, 'queued', { message });
++  }
++
++  // -------------------------------------------------------------------------
++  // Timeout-Watchdog: haengende running/waiting_on_child-Tasks auf failed
++  // -------------------------------------------------------------------------
++  sweepTimeouts(nowMs) {
++    const now = nowMs || Date.now();
++    const stuck = this.db.prepare(
++      "SELECT id, state, timeout_ms, updated_at FROM tasks WHERE state IN ('running', 'waiting_on_child')"
++    ).all();
++
++    const expired = stuck.filter(row => {
++      const updated = Date.parse(row.updated_at || '') || 0;
++      const limit = Number(row.timeout_ms) || 120000;
++      return now - updated > limit;
++    });
++    if (!expired.length) return [];
++
++    const out = [];
++    const sweep = this.db.transaction(() => {
++      expired.forEach(row => {
++        try {
++          out.push(this.updateState(row.id, 'failed', {
++            error: 'TIMEOUT: laenger als ' + row.timeout_ms + 'ms in ' + row.state,
++            code: 'TIMEOUT',
++          }));
++        } catch (err) {
++          this.recordEvent(row.id, row.state, row.state, 'timeout-fehler: ' + err.message);
++        }
++      });
++    });
++    sweep.immediate();
++    return out;
++  }
++
++  startWatchdog(intervalMs) {
++    this.stopWatchdog();
++    const every = Math.max(1000, Number(intervalMs) || 10000);
++    this.watchdogTimer = setInterval(() => {
++      try {
++        this.sweepTimeouts();
++      } catch (err) {
++        // Watchdog darf den Prozess nie beenden
++        this.recordEvent('-', null, 'failed', 'watchdog-fehler: ' + err.message);
++      }
++    }, every);
++    if (this.watchdogTimer.unref) this.watchdogTimer.unref();
++    return this.watchdogTimer;
++  }
++
++  stopWatchdog() {
++    if (this.watchdogTimer) {
++      clearInterval(this.watchdogTimer);
++      this.watchdogTimer = null;
++    }
++  }
++
++  // -------------------------------------------------------------------------
++  // Lesen
++  // -------------------------------------------------------------------------
++  getTask(id) {
++    const row = this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
++    return row ? this.hydrate(row) : null;
++  }
++
++  findByRequestId(requestId) {
++    return this.db.prepare('SELECT * FROM tasks WHERE request_id = ?').get(requestId) || null;
++  }
++
++  listTasks(filter) {
++    const f = filter || {};
++    const where = [];
++    const params = [];
++    if (f.type) { where.push('type = ?'); params.push(f.type); }
++    if (f.state) { where.push('state = ?'); params.push(f.state); }
++    if (f.targetRole) { where.push('target_role = ?'); params.push(f.targetRole); }
++    if (f.sourceRole) { where.push('source_role = ?'); params.push(f.sourceRole); }
++    const sql = 'SELECT * FROM tasks' + (where.length ? ' WHERE ' + where.join(' AND ') : '') +
++      ' ORDER BY priority DESC, created_at ASC LIMIT ?';
++    params.push(Math.min(500, Number(f.limit) || 100));
++    return this.db.prepare(sql).all.apply(this.db.prepare(sql), params).map(r => this.hydrate(r));
++  }
++
++  events(taskId) {
++    return this.db.prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY id ASC').all(taskId);
++  }
++
++  // Events seit einer id (fuer den Live-Stream in die UI)
++  eventsSince(afterId, limit) {
++    const rows = this.db.prepare(
++      'SELECT e.id, e.task_id, e.from_state, e.to_state, e.message, e.timestamp,' +
++      ' t.target_role, t.source_role, t.state AS task_state, t.title AS task_title' +
++      ' FROM task_events e LEFT JOIN tasks t ON t.id = e.task_id' +
++      ' WHERE e.id > ? ORDER BY e.id ASC LIMIT ?'
++    ).all(Number(afterId) || 0, Math.min(200, Number(limit) || 100));
++    return rows.map(row => ({
++      id: row.id,
++      taskId: row.task_id,
++      fromState: row.from_state,
++      toState: row.to_state,
++      message: row.message,
++      timestamp: row.timestamp,
++      roleId: row.target_role || null,
++      sourceRole: row.source_role || null,
++      taskState: row.task_state || null,
++      taskTitle: row.task_title || null,
++    }));
++  }
++
++  countByState() {
++    return this.db.prepare('SELECT state, COUNT(*) AS n FROM tasks GROUP BY state').all();
++  }
++
++  // -------------------------------------------------------------------------
++  // intern
++  // -------------------------------------------------------------------------
++  recordEvent(taskId, fromState, toState, message) {
++    this.db.prepare(
++      'INSERT INTO task_events (task_id, from_state, to_state, message, timestamp) VALUES (?, ?, ?, ?, ?)'
++    ).run(taskId, fromState, toState, message, new Date().toISOString());
++  }
++
++  hydrate(row) {
++    return {
++      id: row.id,
++      type: row.type,
++      title: row.title,
++      description: row.description,
++      schema_name: row.schema_name,
++      payload: parseJson(row.payload, null),
++      source_role: row.source_role,
++      target_role: row.target_role,
++      request_id: row.request_id,
++      priority: row.priority,
++      deadline: row.deadline,
++      acceptance_criteria: parseJson(row.acceptance_criteria, null),
++      state: row.state,
++      attempts: row.attempts,
++      max_attempts: row.max_attempts,
++      error_history: parseJson(row.error_history, []),
++      timeout_ms: row.timeout_ms,
++      claimed_by: row.claimed_by || null,
++      parent_id: row.parent_id || null,
++      result: parseJson(row.result, null),
++      synthesized: Number(row.synthesized) || 0,
++      retry_after: row.retry_after || null,
++      created_at: row.created_at,
++      updated_at: row.updated_at,
++      terminal: isTerminal(row.state),
++    };
++  }
++}
++
++module.exports = { TaskQueue, TaskValidationError, TaskAuthorizationError, MAX_ERROR_HISTORY };
+diff --git a/harness-pro/taskqueue/worker.js b/harness-pro/taskqueue/worker.js
+new file mode 100644
+index 0000000..e5a9b57
+--- /dev/null
++++ b/harness-pro/taskqueue/worker.js
+@@ -0,0 +1,120 @@
++'use strict';
++// worker.js ÔÇö eigener Node-Prozess fuer die SQLite-Task-Queue.
++// Grund: better-sqlite3 (nativ) crasht im Electron-33-Renderer/Main-Prozess,
++// laeuft unter normalem Node aber stabil. Protokoll: JSON-Zeilen ueber stdio.
++//
++// Aufruf: node taskqueue/worker.js <db-file>
++
++const readline = require('readline');
++const { TaskQueue } = require('./taskqueue');
++const { createPolicy } = require('./policy');
++const { synthesize } = require('./synthesizer');
++
++const dbFile = process.argv[2];
++if (!dbFile) {
++  process.stderr.write('db-file fehlt\n');
++  process.exit(2);
++}
++
++let queue;
++try {
++  queue = new TaskQueue(dbFile);
++  // Timeout-Watchdog: haengende Tasks alle 10s auf failed setzen
++  queue.startWatchdog(10000);
++} catch (err) {
++  process.stderr.write('db open fehlgeschlagen: ' + err.message + '\n');
++  process.exit(3);
++}
++
++const rl = readline.createInterface({ input: process.stdin, terminal: false });
++
++// serialize async synthesize so parallel synth RPCs cannot double-report
++let synthChain = Promise.resolve();
++
++function reply(payload) {
++  process.stdout.write(JSON.stringify(payload) + '\n');
++}
++
++function handle(msg) {
++  const id = msg.id;
++  const method = msg.method;
++  const params = msg.params || {};
++  if (method === 'synthesize') {
++    synthChain = synthChain
++      .then(() => synthesize(queue, params.parentRoleId, { requestId: params.requestId }))
++      .then(report => reply({ id, ok: true, result: { report } }))
++      .catch(err => reply({ id, ok: false, error: { message: err.message, code: err.code || 'SYNTH_FAILED' } }));
++    synthChain = synthChain.catch(() => {});
++    return;
++  }
++  try {
++    let result;
++    switch (method) {
++      case 'enqueue':
++        result = queue.enqueue(params.task);
++        break;
++      case 'claim':
++        result = { task: queue.claimNextTask(params.roleId) };
++        break;
++      case 'updateState':
++        result = { task: queue.updateState(params.taskId, params.state, params) };
++        break;
++      case 'get':
++        result = { task: queue.getTask(params.taskId) };
++        break;
++      case 'list':
++        result = { tasks: queue.listTasks(params.filter) };
++        break;
++      case 'checkChildren':
++        result = { parent: queue.checkChildrenStatus(params.parentId) };
++        break;
++      case 'children':
++        result = { children: queue.listChildren(params.parentId) };
++        break;
++      case 'events':
++        result = { events: queue.events(params.taskId) };
++        break;
++      case 'eventsSince':
++        result = { events: queue.eventsSince(params.afterId, params.limit) };
++        break;
++      case 'stats':
++        result = { counts: queue.countByState() };
++        break;
++      case 'setPolicy':
++        queue.policy = createPolicy(Array.isArray(params.roles) ? params.roles : []);
++        result = { roles: (Array.isArray(params.roles) ? params.roles.length : 0) };
++        break;
++      case 'ping':
++        result = { pong: true };
++        break;
++      case 'close':
++        reply({ id, ok: true, result: {} });
++        queue.close();
++        process.exit(0);
++        return;
++      default:
++        reply({ id, ok: false, error: { message: 'unbekannte methode: ' + method, code: 'RPC_UNKNOWN' } });
++        return;
++    }
++    reply({ id, ok: true, result });
++  } catch (err) {
++    reply({ id, ok: false, error: { message: err.message, code: err.code || 'TASK_ERROR' } });
++  }
++}
++
++rl.on('line', line => {
++  if (!line.trim()) return;
++  let msg;
++  try {
++    msg = JSON.parse(line);
++  } catch (err) {
++    process.stderr.write('ungueltiges JSON: ' + line.slice(0, 120) + '\n');
++    return;
++  }
++  handle(msg);
++});
++
++rl.on('close', () => {
++  try { queue.close(); } catch (e) { /* egal */ }
++  process.exit(0);
++});
+diff --git a/harness-pro/test/install-skill.test.js b/harness-pro/test/install-skill.test.js
+new file mode 100644
+index 0000000..17bfc5b
+--- /dev/null
++++ b/harness-pro/test/install-skill.test.js
+@@ -0,0 +1,132 @@
++'use strict';
++// install_skill / list_skills / uninstall_skill mit Fake-fetch.
++
++const test = require('node:test');
++const assert = require('node:assert');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const crypto = require('node:crypto');
++
++const { ToolRunner, isPrivateOrLocalHost } = require('../lib/tool-runner');
++
++function workspace() {
++  return fs.mkdtempSync(path.join(os.tmpdir(), 'astra-install-'));
++}
++
++function makeResponse({ status = 200, headers = {}, text } = {}) {
++  const payload = Buffer.from(text === undefined ? '' : String(text), 'utf8');
++  const hdr = Object.assign({}, headers);
++  return {
++    status,
++    ok: status >= 200 && status < 300,
++    headers: {
++      get(name) {
++        const key = Object.keys(hdr).find((k) => k.toLowerCase() === String(name).toLowerCase());
++        return key === undefined ? null : hdr[key];
++      },
++    },
++    async text() {
++      return payload.toString('utf8');
++    },
++    async arrayBuffer() {
++      return payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength);
++    },
++  };
++}
++
++function echoBundle() {
++  return fs.readFileSync(
++    path.join(__dirname, '..', 'fixtures', 'skills', 'echo-bundle.json'),
++    'utf8',
++  );
++}
++
++test('install_skill laedt Bundle, registriert Tool, list/uninstall', async () => {
++  const ws = workspace();
++  const body = echoBundle();
++  const digest = crypto.createHash('sha256').update(body, 'utf8').digest('hex');
++  const fetch = async () => makeResponse({ text: body });
++  const runner = new ToolRunner(ws, { fetch, loadSkills: false });
++
++  const installed = await runner.execute('install_skill', {
++    url: 'https://example.com/echo-bundle.json',
++    sha256: digest,
++  });
++  assert.strictEqual(installed.ok, true);
++  assert.strictEqual(installed.id, 'echo-helpers');
++  assert.ok(installed.tools.indexOf('echo_upper') >= 0);
++
++  const listed = await runner.execute('list_skills', {});
++  assert.strictEqual(listed.length, 1);
++
++  const out = await runner.execute('echo_upper', { text: 'flaggg' });
++  assert.strictEqual(out.text, 'FLAGGG');
++  assert.strictEqual(fs.readFileSync(path.join(ws, 'echo-out.txt'), 'utf8'), 'FLAGGG');
++
++  await runner.execute('uninstall_skill', { id: 'echo-helpers' });
++  assert.strictEqual((await runner.execute('list_skills', {})).length, 0);
++  await assert.rejects(runner.execute('echo_upper', { text: 'x' }), /unbekanntes Tool/);
++});
++
++test('install_skill: sha256 mismatch wird abgelehnt', async () => {
++  const ws = workspace();
++  const body = echoBundle();
++  const fetch = async () => makeResponse({ text: body });
++  const runner = new ToolRunner(ws, { fetch, loadSkills: false });
++  await assert.rejects(
++    runner.execute('install_skill', {
++      url: 'https://example.com/echo-bundle.json',
++      sha256: '0'.repeat(64),
++    }),
++    /sha256 mismatch/,
++  );
++});
++
++test('SSRF: private/localhost URLs werden blockiert', async () => {
++  assert.strictEqual(isPrivateOrLocalHost('127.0.0.1'), true);
++  assert.strictEqual(isPrivateOrLocalHost('169.254.169.254'), true);
++  assert.strictEqual(isPrivateOrLocalHost('10.0.0.1'), true);
++  assert.strictEqual(isPrivateOrLocalHost('192.168.1.1'), true);
++  assert.strictEqual(isPrivateOrLocalHost('example.com'), false);
++
++  const ws = workspace();
++  const runner = new ToolRunner(ws, {
++    fetch: async () => makeResponse({ text: 'nope' }),
++    loadSkills: false,
++  });
++  await assert.rejects(
++    runner.execute('web_fetch', { url: 'http://127.0.0.1/secret' }),
++    /nicht erlaubt/,
++  );
++  await assert.rejects(
++    runner.execute('download_file', { url: 'http://169.254.169.254/latest', path: 'x.bin' }),
++    /nicht erlaubt/,
++  );
++  await assert.rejects(
++    runner.execute('install_skill', { url: 'http://localhost/skill.json' }),
++    /nicht erlaubt/,
++  );
++});
++
++test('SSRF: Redirect auf private IP wird blockiert', async () => {
++  const ws = workspace();
++  let calls = 0;
++  const fetch = async (url) => {
++    calls += 1;
++    if (calls === 1) {
++      return makeResponse({
++        status: 302,
++        headers: { location: 'http://127.0.0.1/evil' },
++        text: '',
++      });
++    }
++    return makeResponse({ text: 'should-not-fetch' });
++  };
++  const runner = new ToolRunner(ws, { fetch, loadSkills: false });
++  await assert.rejects(
++    runner.execute('web_fetch', { url: 'https://example.com/redir' }),
++    /nicht erlaubt/,
++  );
++  assert.strictEqual(calls, 1);
++});
+diff --git a/harness-pro/test/race-cas.test.js b/harness-pro/test/race-cas.test.js
+new file mode 100644
+index 0000000..7686532
+--- /dev/null
++++ b/harness-pro/test/race-cas.test.js
+@@ -0,0 +1,130 @@
++'use strict';
++// Race-/CAS-Tests: updateState, Child-before-wait, parallele Synthese.
++
++const test = require('node:test');
++const assert = require('node:assert');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++
++const { TaskQueue, TaskValidationError } = require('../taskqueue/taskqueue');
++const { AgentRuntime } = require('../taskqueue/runtime');
++const { createPolicy } = require('../taskqueue/policy');
++const { synthesize } = require('../taskqueue/synthesizer');
++
++function roles() {
++  return [
++    { id: 'boss', relationships: { superiors: [], subordinates: ['sub'], peers: [] } },
++    { id: 'sub', relationships: { superiors: ['boss'], subordinates: [], peers: [] } },
++  ];
++}
++
++test('updateState CAS: veralteter Snapshot scheitert (TOCTOU)', () => {
++  const q = new TaskQueue(':memory:');
++  const { task } = q.enqueue({
++    type: 'request',
++    title: 't',
++    schema_name: 's',
++    payload: {},
++    source_role: 'system',
++    target_role: 'dev',
++    request_id: 'cas-1',
++  });
++  q.claimNextTask('dev');
++  q.updateState(task.id, 'running');
++
++  const stale = q.getTask(task.id);
++  assert.strictEqual(stale.state, 'running');
++  // Parallel-Writer: State unter dem Snapshot wegziehen
++  q.db.prepare(
++    "UPDATE tasks SET state = 'done', result = ?, updated_at = ? WHERE id = ?"
++  ).run(JSON.stringify({ ok: true }), new Date().toISOString(), task.id);
++
++  const realGet = q.getTask.bind(q);
++  q.getTask = (id) => {
++    q.getTask = realGet;
++    return stale; // absichtlich veraltet
++  };
++  assert.throws(
++    () => q.updateState(task.id, 'failed', { error: 'zu spaet' }),
++    (err) => err instanceof TaskValidationError && /state-Konflikt|CAS/.test(err.message),
++  );
++  assert.strictEqual(q.getTask(task.id).state, 'done');
++  q.close();
++});
++
++test('delegate: Parent waiting_on_child bevor Kind claimbar ÔÇö kein Stuck wenn Kind sofort fertig', async () => {
++  const queue = new TaskQueue(':memory:', { policy: createPolicy(roles()) });
++  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'astra-del-'));
++  const { task: parent } = queue.enqueue({
++    type: 'request',
++    title: 'Boss-Job',
++    schema_name: 's',
++    payload: {},
++    source_role: 'system',
++    target_role: 'boss',
++    request_id: 'race-del-1',
++  });
++
++  const boss = new AgentRuntime({
++    roleId: 'boss',
++    queue,
++    workspace: ws,
++    pollMs: 5,
++    policy: createPolicy(roles()),
++    chat: async () => ({
++      result: {
++        tool: 'delegate',
++        args: { role: 'sub', title: 'schnell', payload: { x: 1 } },
++      },
++    }),
++  });
++
++  const first = await boss.tick();
++  assert.ok(first.delegated);
++  const afterDeleg = queue.getTask(parent.id);
++  assert.ok(
++    afterDeleg.state === 'waiting_on_child' || afterDeleg.state === 'queued',
++    'Parent muss waiting oder (Kind schon fertig) queued sein, war: ' + afterDeleg.state,
++  );
++
++  const children = queue.listChildren(parent.id);
++  assert.strictEqual(children.length, 1);
++
++  // Kind sofort erledigen bevor/obwohl Parent wartet
++  const child = children[0];
++  queue.claimNextTask('sub');
++  queue.updateState(child.id, 'running');
++  queue.updateState(child.id, 'done', { result: { ok: true } });
++  queue.checkChildrenStatus(parent.id);
++
++  const woke = queue.getTask(parent.id);
++  assert.strictEqual(woke.state, 'queued', 'Parent darf nicht in waiting_on_child stecken bleiben');
++  queue.close();
++});
++
++test('parallele synthesize: nur ein Report, CAS markSynthesized', async () => {
++  const queue = new TaskQueue(':memory:');
++  const { task: c1 } = queue.enqueue({
++    type: 'request',
++    title: 'A',
++    schema_name: 's',
++    payload: {},
++    source_role: 'system',
++    target_role: 'dev1',
++    request_id: 'synth-race-a',
++    parent_id: 'boss',
++  });
++  queue.claimNextTask('dev1');
++  queue.updateState(c1.id, 'running');
++  queue.updateState(c1.id, 'done', { result: { a: 1 } });
++
++  const results = await Promise.all([
++    synthesize(queue, 'boss'),
++    synthesize(queue, 'boss'),
++  ]);
++  const reports = results.filter(Boolean);
++  assert.strictEqual(reports.length, 1, 'genau ein Synthese-Report');
++  assert.strictEqual(await synthesize(queue, 'boss'), null);
++  queue.close();
++});
+diff --git a/harness-pro/test/skill-sandbox.test.js b/harness-pro/test/skill-sandbox.test.js
+new file mode 100644
+index 0000000..1e163e6
+--- /dev/null
++++ b/harness-pro/test/skill-sandbox.test.js
+@@ -0,0 +1,98 @@
++'use strict';
++// Unit-Tests der Skill-VM (ohne Netz).
++
++const test = require('node:test');
++const assert = require('node:assert');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++
++const { ToolRunner } = require('../lib/tool-runner');
++const {
++  validateManifest,
++  loadSkillModule,
++  writeSkillFiles,
++  loadSkillFromDisk,
++  skillDir,
++} = require('../lib/skill-sandbox');
++
++function workspace() {
++  return fs.mkdtempSync(path.join(os.tmpdir(), 'astra-skill-'));
++}
++
++test('validateManifest akzeptiert gueltiges Manifest und lehnt shell-Permission ab', () => {
++  const ok = validateManifest({
++    id: 'demo',
++    name: 'Demo',
++    version: '1.0.0',
++    entry: 'index.js',
++    tools: [{ name: 'do_thing' }],
++    permissions: ['workspace_read'],
++  });
++  assert.strictEqual(ok.id, 'demo');
++  assert.throws(
++    () =>
++      validateManifest({
++        id: 'bad',
++        tools: [{ name: 'x' }],
++        permissions: ['shell'],
++      }),
++    /Permission nicht erlaubt/,
++  );
++});
++
++test('loadSkillModule: Tool laeuft in VM und schreibt nur ueber ctx', async () => {
++  const ws = workspace();
++  const runner = new ToolRunner(ws, { loadSkills: false });
++  const manifest = validateManifest({
++    id: 'local',
++    tools: [{ name: 'greet' }],
++    permissions: ['workspace_write'],
++  });
++  const source =
++    'module.exports = { tools: { greet: function (args, ctx) {' +
++    ' ctx.writeFile("hi.txt", "Hallo " + (args.name || ""));' +
++    ' return { ok: true };' +
++    '} } };';
++  const tools = loadSkillModule(source, runner, manifest);
++  const result = await tools.greet({ name: 'Doctor' });
++  assert.deepStrictEqual(result, { ok: true });
++  assert.strictEqual(fs.readFileSync(path.join(ws, 'hi.txt'), 'utf8'), 'Hallo Doctor');
++});
++
++test('Skill ohne require/process: require wirft zur Laufzeit in der VM', async () => {
++  const ws = workspace();
++  const runner = new ToolRunner(ws, { loadSkills: false });
++  const manifest = validateManifest({
++    id: 'evil',
++    tools: [{ name: 'boom' }],
++    permissions: ['workspace_read'],
++  });
++  const source =
++    'module.exports = { tools: { boom: function () { return require("fs"); } } };';
++  const tools = loadSkillModule(source, runner, manifest);
++  await assert.rejects(tools.boom({}), /require is not defined|require/);
++});
++
++test('writeSkillFiles + loadSkillFromDisk + ToolRunner Registry', async () => {
++  const ws = workspace();
++  const runner = new ToolRunner(ws, { loadSkills: false });
++  const manifest = validateManifest({
++    id: 'disk-skill',
++    name: 'Disk',
++    version: '0.1.0',
++    tools: [{ name: 'add_one' }],
++    permissions: ['workspace_read'],
++  });
++  writeSkillFiles(skillDir(ws, 'disk-skill'), manifest, {
++    'index.js':
++      'module.exports = { tools: { add_one: function (args) { return { n: Number(args.n) + 1 }; } } };',
++  });
++  const loaded = loadSkillFromDisk(runner, skillDir(ws, 'disk-skill'));
++  runner._registerSkill(loaded);
++  const out = await runner.execute('add_one', { n: 41 });
++  assert.deepStrictEqual(out, { n: 42 });
++  const listed = runner.list_skills();
++  assert.strictEqual(listed.length, 1);
++  assert.strictEqual(listed[0].id, 'disk-skill');
++});

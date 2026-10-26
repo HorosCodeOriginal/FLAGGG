@@ -1,0 +1,36 @@
+{
+  "name": "claude-harness",
+  "version": "1.0.0",
+  "description": "Claude Harness — Desktop-App mit der Anthropic (Claude) API",
+  "main": "main.js",
+  "author": "fr",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.fr.claudeharness",
+    "productName": "Claude Harness",
+    "files": [
+      "main.js",
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

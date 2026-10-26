@@ -1,0 +1,63 @@
+# Dependencies & builds
+**/node_modules/
+**/dist/
+**/out/
+**/.cache/
+**/build/
+*.exe
+*.dmg
+*.AppImage
+*.blockmap
+*.snap
+
+# Secrets & Keys
+fr-gateway/keys_raw.txt
+fr-gateway/secrets/
+**/.env
+**/*.env
+**/*.key
+**/*.pem
+**/astra-key.txt
+**/credentials.json
+**/credentials.txt
+
+# Runtime-Daten
+**/data/
+**/logs/
+**/workspaces/
+**/testrun/
+**/envs/
+
+# Harness local artifacts
+harness-pro/_*_ids.json
+
+# Patches & Diffs (gehören nicht ins Repo)
+*.diff
+*.patch
+*.orig
+*.bak
+*.bak-*
+**/*.bak-*
+
+# Audit / local notes
+.audit/
+.Log/
+
+# Python / panel junk
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test / temp
+coverage/
+.nyc_output/
+tmp/
+temp/
+*.log
+**/ui-test-result.txt

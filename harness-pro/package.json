@@ -1,0 +1,50 @@
+{
+  "name": "harness-pro-desktop",
+  "version": "1.0.0",
+  "description": "Astra Harness — Desktop-App mit einem Astra-Token",
+  "main": "main.js",
+  "author": "fr",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "test": "node scripts/run-tests.js",
+    "seed": "node scripts/seed-live-test.js",
+    "fire": "node scripts/fire-test-task.js",
+    "seed-goal": "node scripts/seed-goal.js",
+    "goal-test": "node scripts/run-goal-test.js",
+    "live-test": "electron . --live-test",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.fr.harnesspro",
+    "productName": "Astra Harness",
+    "files": [
+      "main.js",
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "lib/**/*",
+      "taskqueue/**/*",
+      "scripts/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0"
+  }
+}
