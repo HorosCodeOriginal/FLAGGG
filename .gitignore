@@ -53,6 +53,7 @@ harness-pro/_*_ids.json
 Thumbs.db
 .vscode/
 .idea/
+.cursor/skills-cache/
 
 # Test / temp
 coverage/

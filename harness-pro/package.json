@@ -15,6 +15,9 @@
     "seed-goal": "node scripts/seed-goal.js",
     "goal-test": "node scripts/run-goal-test.js",
     "attack-test": "node scripts/run-attack-scenarios.js",
+    "seed-team-5": "node scripts/seed-team-5.js",
+    "fire-team-task": "node scripts/fire-team-task.js",
+    "team-test": "node scripts/run-team-test.js",
     "live-test": "electron . --live-test",
     "dist": "electron-builder"
   },
