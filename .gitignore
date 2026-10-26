@@ -54,6 +54,8 @@ Thumbs.db
 .vscode/
 .idea/
 .cursor/skills-cache/
+.cursor/agents-cache/
+.cursor/session/
 
 # Test / temp
 coverage/
