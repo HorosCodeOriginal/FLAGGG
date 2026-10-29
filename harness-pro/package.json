@@ -6,7 +6,7 @@
   "author": "fr",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/electron-run.js .",
     "web": "node server.js",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "test": "node scripts/run-tests.js",
@@ -18,7 +18,7 @@
     "seed-team-5": "node scripts/seed-team-5.js",
     "fire-team-task": "node scripts/fire-team-task.js",
     "team-test": "node scripts/run-team-test.js",
-    "live-test": "electron . --live-test",
+    "live-test": "node scripts/electron-run.js . --live-test",
     "dist": "electron-builder"
   },
   "devDependencies": {

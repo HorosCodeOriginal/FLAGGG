@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><title>RANSOMWARE — Guide</title>
+<style>
+:root{--bg:#0a0e14;--panel:#111722;--panel2:#0d121b;--line:#1e2a3a;
+--txt:#c8d4e3;--dim:#5b6b80;--accent:#22d3ee;--ok:#34d399;--warn:#fbbf24;
+--bad:#f87171;--mono:"Cascadia Mono",Consolas,monospace;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:radial-gradient(1200px 600px at 70% -10%,#101d2e 0%,var(--bg) 55%);
+color:var(--txt);font-family:var(--mono)}
+.wrap{max-width:1100px;margin:0 auto;padding:32px 28px 60px}
+header{display:flex;align-items:center;gap:16px;padding-bottom:18px;
+border-bottom:1px solid var(--line);margin-bottom:24px}
+.logo{width:40px;height:40px}.logo svg{width:100%;height:100%}
+h1{font-size:19px;letter-spacing:3px;color:#e6f0fa}
+h1 span{color:var(--accent)}
+.sub{color:var(--dim);font-size:11px;letter-spacing:1px;margin-top:2px}
+.tag{margin-left:auto;font-size:10px;letter-spacing:1px;padding:5px 12px;
+border-radius:20px;border:1px solid rgba(52,211,153,.35);color:var(--ok)}
+.flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:22px 0 26px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+padding:14px 16px;min-width:150px;flex:1}
+.step .n{font-size:10px;color:var(--accent);letter-spacing:1px}
+.step .t{font-size:13px;color:#dbe7f5;margin-top:4px}
+.step .d{font-size:10px;color:var(--dim);margin-top:4px;line-height:1.5}
+.arrow{color:var(--accent);font-size:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.box{background:linear-gradient(180deg,var(--panel),var(--panel2));
+border:1px solid var(--line);border-radius:12px;padding:18px}
+.box h3{font-size:12px;letter-spacing:2px;color:var(--dim);margin-bottom:12px}
+ul{list-style:none}
+li{font-size:12px;color:#aebdd0;padding:7px 0 7px 22px;position:relative;line-height:1.5}
+li:before{content:"▸";position:absolute;left:0;color:var(--accent)}
+.cmd{background:#070b10;border:1px solid var(--line);border-radius:10px;
+padding:14px 16px;margin-top:18px}
+.cmd code{color:var(--accent);font-size:12px;font-family:var(--mono);word-break:break-all}
+.warn{background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.3);
+border-radius:10px;padding:12px 16px;margin-top:14px;font-size:11px;color:var(--warn)}
+.note{color:var(--dim);font-size:11px;margin-top:14px;line-height:1.6}
+</style></head><body><div class="wrap">
+<header>
+  <div class="logo"><svg viewBox="0 0 40 40" fill="none">
+    <rect x="3" y="3" width="34" height="34" rx="9" stroke="#f87171" stroke-width="1.5" fill="rgba(34,211,238,.04)"/>
+    <text x="20" y="27" text-anchor="middle" font-size="18" font-weight="700" fill="#f87171" font-family="monospace">M</text>
+  </svg></div>
+  <div><h1>FLAGGG <span>RANSOMWARE</span></h1><div class="sub">AES-256-GCM · In-Place · Self-Delete</div></div>
+  <div class="tag">BEREICH</div>
+</header>
+
+<div class="flow"><div class="step"><div class="n">01</div><div class="t">Ermittlung</div><div class="d">GetLogicalDrives → GetDriveTypeW == DRIVE_FIXED</div></div><div class="arrow">▶</div>
+<div class="step"><div class="n">02</div><div class="t">Walk</div><div class="d">FindFirstFileW, Skip-Listen für Systemordner</div></div><div class="arrow">▶</div>
+<div class="step"><div class="n">03</div><div class="t">Schlüssel</div><div class="d">BCryptGenRandom: 32B Key + 12B Nonce je Datei</div></div><div class="arrow">▶</div>
+<div class="step"><div class="n">04</div><div class="t">Verschlüsselung</div><div class="d">BCryptEncrypt (GCM), Layout: iv|tag|ct</div></div><div class="arrow">▶</div>
+<div class="step"><div class="n">05</div><div class="t">Rename</div><div class="d">MoveFileW → .flaggg, Note in jedem Verzeichnis</div></div><div class="arrow">▶</div>
+<div class="step"><div class="n">06</div><div class="t">Self-Delete</div><div class="d">Kopie nach %TEMP%, cmd /c ping & del</div></div></div>
+
+<div class="grid">
+  <div class="box"><h3>KERN</h3><ul><li>Datei-Filter: Office, Medien, Archive, Wallets, Keys, DBs</li>
+<li>Systemordner (Windows, Program Files, Recycle Bin) werden übersprungen</li>
+<li>ESC beim Start = Abbruch-Schalter für den Operator</li>
+<li>Pro Datei eigener Schlüssel — massenentschlüsselung ohne Master unmöglich</li></ul></div>
+  <div class="box">
+    <h3>BAU</h3>
+    <div class="cmd"><code>cl /EHsc /O2 /Fe:ransom.exe ransom.cpp bcrypt.lib shlwapi.lib advapi32.lib</code></div>
+    <div class="warn">⚠ PHYSISCHE GEFAHR FÜR DATEN: Läufe verschlüsseln echte Dateien irreversibel. Nur in einer VM / auf Testdaten ausführen. ESC-Abbruch ist kein Schutz gegen versehentlichen Start.</div>
+    <div class="note">Opsec: Sliding-Window auf Write, ABER reines In-Place-Verfahren — kein zweiter Pass über das Medium.</div>
+  </div>
+</div>
+
+</div></body></html>
