@@ -29,8 +29,8 @@ function buildDesk(options) {
     };
   }
 
+  // 5er-Team: Boss/Architekt + Backend + Frontend + QA + Docs (echte Graph-Kanten)
   const subs = ['dev_backend', 'dev_frontend', 'qa_tester', 'doc_writer'];
-  const superiorOnly = { superiors: ['boss_architect'], subordinates: [], peers: [] };
   const backendRels = {
     superiors: ['boss_architect'],
     subordinates: [],
@@ -40,6 +40,17 @@ function buildDesk(options) {
     superiors: ['boss_architect'],
     subordinates: [],
     peers: ['dev_backend'],
+  };
+  // QA <-> Docs: Peer-Hand-off fuer Testbericht -> README
+  const qaRels = {
+    superiors: ['boss_architect'],
+    subordinates: [],
+    peers: ['doc_writer'],
+  };
+  const docRels = {
+    superiors: ['boss_architect'],
+    subordinates: [],
+    peers: ['qa_tester'],
   };
 
   const desk = {
@@ -55,20 +66,20 @@ function buildDesk(options) {
     failover: { enabled: false },
     spaces: [],
     roles: [
-      role('boss_architect', 'Boss Architect', 'astra', 'key_astra_boss',
-        'Koordiniert Todo-Team: delegiert, prueft, Fix-Tasks', {
+      role('boss_architect', 'Boss / Architekt', 'astra', 'key_astra_boss',
+        'Orchestriert Goal, FSM-Policy, Delegationen und Fix-Tasks; prueft Architektur', {
           superiors: [],
           subordinates: subs.slice(),
           peers: [],
         }),
       role('dev_backend', 'Dev Backend', 'opus', 'key_opus_backend',
-        'Flask/FastAPI REST-API', backendRels),
+        'Flask/FastAPI REST-API im shared team_repo', backendRels),
       role('dev_frontend', 'Dev Frontend', 'astra', 'key_astra_frontend',
-        'HTML/CSS/JS mit Fetch', frontendRels),
-      role('qa_tester', 'QA Tester', 'opus', 'key_opus_qa',
-        'Pytest schreiben und ausfuehren', superiorOnly),
-      role('doc_writer', 'Doc Writer', 'astra', 'key_astra_doc',
-        'README und API-Doku', superiorOnly),
+        'HTML/CSS/JS mit Fetch gegen die API', frontendRels),
+      role('qa_tester', 'QA', 'opus', 'key_opus_qa',
+        'Pytest schreiben/ausfuehren; meldet Failures an Boss; Peer Docs', qaRels),
+      role('doc_writer', 'Docs', 'astra', 'key_astra_doc',
+        'README/API-Doku nur bei API-Aenderung; Peer QA', docRels),
     ],
   };
 

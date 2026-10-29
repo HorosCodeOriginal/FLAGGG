@@ -20,6 +20,8 @@ function parseToolCall(reply) {
     return { tool: reply.tool, args: reply.args || {} };
   }
   if (reply && typeof reply.content === 'string') candidates.push(reply.content);
+  // role-chat parseContent liefert bei Nicht-JSON { text: "..." } (oft mit ```json-Fence)
+  if (reply && typeof reply.text === 'string') candidates.push(reply.text);
   if (reply && reply.result && typeof reply.result === 'object') {
     if (typeof reply.result.text === 'string') candidates.push(reply.result.text);
     if (typeof reply.result.tool === 'string') {

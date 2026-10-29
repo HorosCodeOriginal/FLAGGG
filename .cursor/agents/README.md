@@ -81,6 +81,26 @@ Kein Agent-Inhalt ohne Freigabe im Chat (ein Agent nach dem anderen), außer War
 
 Vollständige Liste = Dateien in diesem Ordner. Bei Neuaufnahme Zeile hier + `docs/CHANGELOG.md` ergänzen.
 
+## Community-Subagents (`comm-*.md`)
+
+134 zusätzliche Subagents aus [ampedweb/awesome-subagents](https://github.com/ampedweb/awesome-subagents) (Kategorien 01–10). Install/Repair:
+
+`pwsh -NoProfile -File ..\..\scripts\Install-AgentCommunity.ps1 -Proceed`
+
+Quell-Cache: `.cursor/agents-cache/ampedweb-awesome-subagents/`. Namen: `comm-<kebab-name>.md` — kollidieren nicht mit Horos-`PascalCase.md`.
+
+## Composer-Pack (madebyaris)
+
+Quelle: [madebyaris/cursor-composer-rules](https://github.com/madebyaris/cursor-composer-rules) → Cache `.cursor/agents-cache/madebyaris-cursor-composer-rules/`.
+
+| Artefakt | Ziel |
+|----------|------|
+| Agents | `verifier.md`, `debugger.md` |
+| Rules | `.cursor/rules/composer-*.mdc` + `clarify-first.mdc` + `cursor-tools-discipline.mdc` (11) |
+| Skills | `.cursor/skills/senior-practices/`, `deep-research/` |
+
+Always-on Spine: `composer-core` + `composer-verification`. Horos-Roster bleibt.
+
 ## Adaptions-Checkliste (jeder Agent)
 
 1. Kontext: HorosAgent Master (`C:\HorosAgent`), Multi-PC wo relevant

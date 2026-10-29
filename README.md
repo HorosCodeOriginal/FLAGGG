@@ -83,13 +83,27 @@ npm start
 
 Optional: `harness-pro/data/astra-key.txt` mit dem Gateway-Token (Pfad liegt unter `**/data/` und ist gitignored).
 
+### 4. Team-5 Test-Setup (Boss / Architekt + Devs + QA + Docs)
+
+```bash
+cd harness-pro
+npm run seed-team-5          # schreibt data/desk.json + workspaces/team_repo
+npm run team-test            # E2E: Delegation, Self-Heal, Artefakte, Pytest
+```
+
+Rollen-Graph: `boss_architect` → 4 Subordinates; Backend↔Frontend Peers; QA↔Docs Peers. Shared Workspace: `workspaces/team_repo`.
+
 ## Tests / CI
 
 ```bash
-cd harness-pro && npm test
+cd harness-pro && npm test          # Unit inkl. Team-5-Graph + Skill-E2E
+cd harness-pro && npm run team-test # volles 5-Agenten-Szenario (braucht Python/Flask/Pytest)
 ```
 
-GitHub Actions: `.github/workflows/harness-pro.yml`
+GitHub Actions (`.github/workflows/harness-pro.yml`):
+
+- Job `test` — `npm test`
+- Job `team-test` — `seed-team-5` + `npm run team-test`
 
 ## Security-Hinweis
 

@@ -1,0 +1,82 @@
+---
+description: New screen, feature, endpoint, or multi-layer slice — freeze seams, ship one demoable path, failure modes, Run/Wired handoff. Skip for a single-module code change.
+alwaysApply: false
+---
+
+# Composer full-stack delivery
+
+Use when building or continuing a **new screen, feature, endpoint**, or any work that spans **multiple layers**: client + server, server + persistence, service + service, code + migration.
+
+A single-module code change uses the fast path in [composer-core](composer-core.mdc) § Two speeds. Skip this rule's slice floor.
+
+Stack-agnostic: replace "client/server/persistence" with whatever your spine actually is. Complements [composer-core](composer-core.mdc) § User-facing closeout and § Build the app.
+
+## Step 1 — Freeze the seams
+
+Before writing code, write the one-sentence acceptance from [composer-core](composer-core.mdc) § Two speeds ("The user can X and see Y"), then the boundaries (a few bullets, not a doc):
+
+- **User-visible behavior** for the smallest useful story
+- **Contracts at every seam**: API shape, event shape, function signature, error semantics
+- **Trust boundaries**: actor, authentication, authorization
+- **Consistency**: transactions, retries, idempotency where partial failure repeats
+- **Observability**: existing logs/traces/metrics at these seams; minimum new ones
+
+If two of these conflict, surface the conflict before coding around it — often high confusion weight ([clarify-first](clarify-first.mdc)).
+
+## Step 2 — Ship one vertical slice
+
+Build a thin column end-to-end before widening:
+
+1. One client/caller path
+2. One server handler or worker
+3. One persistence or integration edge if persistence is new
+
+Use the **minimum UI** needed to expose state transitions; defer layout, animation, and polish. The slice is not done until it is **demoable** at that surface.
+
+**Slice-1 floor** (same as [composer-core](composer-core.mdc) § Build the app): one real interaction plus an empty or error state — or name the omission in **Wired**. A husk form with a stubbed API is not a finished slice unless **Wired** says so.
+
+Resist the second screen, second endpoint, or speculative migration until the first slice **demonstrably works** at the surface that matters.
+
+## Step 3 — Treat failure modes as first-class
+
+Happy path is half the work. Enumerate at least:
+
+- **Validation** vs **semantic** rejections — different responses, different recovery
+- **Authorization** vs **not found** — mindful of existence-leak trade-offs
+- **Timeouts and partial outages** — retry, backoff, or degrade with a clear contract
+- **Duplicate submissions** — idempotency or explicit user-visible handling
+- **Empty / boundary states** — empty list, single item, max length
+
+Same attention as the happy path when they affect trust or correctness.
+
+## Step 4 — Proportional verification
+
+Match test depth to risk and to the project's existing investment.
+
+- Contract or integration tests exist → use them
+- Only unit tests → smallest unit that covers the seam
+- Ad-hoc checks → curl / CLI / browser, captured as artifacts (script, fixture), not throwaway gestures
+- Can't run → `implemented but unverified` with the precise gap ([composer-verification](composer-verification.mdc))
+
+Don't bolt on a heavy test framework mid-slice; don't refactor the test layout for one new test.
+
+## Coordination
+
+- Parallelize **reading**: client, server, schema, tests at once
+- Sequentialize **writing** when dependent: migrate before dependent code; regenerate types after schema change; deploy server before clients expect new endpoints
+
+## Closeout — handoff for continue
+
+Demonstrate the slice at the surface that matters. Hand back artifacts another engineer (or the next turn) can rerun: command, request, expected output, or screenshot.
+
+The final message must **stand alone** (the user did not see tool calls) — same contract as [composer-core](composer-core.mdc) § User-facing closeout. Lead with the outcome, then:
+
+- **Done** — what this slice shipped
+- **Next** — the natural next slice (second endpoint, bulk path, polish)
+- **Run** — how to exercise the acceptance sentence (URL, click path, or request)
+- **Wired** — what is real vs stubbed (**required** on Build / Continue)
+- **Deferred** — intentionally out of scope ("phase 2: error toast, retry banner")
+- **Assumptions** — anything the user may need to correct
+- **Proof label** — `verified` / `implemented but unverified` / `blocked`
+
+That handoff is how "continue the app" works across turns — not a greenfield every message.

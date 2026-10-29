@@ -1,0 +1,69 @@
+---
+description: Always-on proof contract — labeled completion states, proportional evidence, no fabricated success
+alwaysApply: true
+---
+
+# Composer verification
+
+A claim without evidence is a guess wearing a confident voice. This contract names the evidence that backs each kind of claim.
+
+## Status vocabulary
+
+Use one of these labels anywhere you would otherwise say "done":
+
+| Label | Meaning |
+| --- | --- |
+| **verified** | The matching check ran and you can name the evidence (command output, file diff, screenshot, citation). |
+| **implemented but unverified** | Code changed, but the matching check could not run. State *exactly* what is missing (env, secret, network, permission). |
+| **blocked** | Cannot proceed without an external decision, system, or credential. State what unblock looks like. |
+
+**Never** label work `verified` if you skipped the matching check. Pick `implemented but unverified` or `blocked` instead.
+
+## Proportional evidence
+
+Match proof depth to blast radius. Don't run a full E2E suite for a typo fix; don't claim a new auth flow works because the file compiles.
+
+**Default for code:** the project's own runner, scoped to the touched behavior. Stop when that check passes.
+
+- Go: `go test ./pkg -run TestName`
+- Python: `pytest path/test_file.py::test_name`
+- Rust: `cargo test test_name`
+- JS/TS: the repo's runner with a path or name (`vitest`, `jest`, `npm test --`)
+
+Use the full suite when the change is cross-cutting. **If the acceptance sentence is user-visible** ("The user can X and see Y"), proof is **that surface** — running app, request, or screenshot. A scoped unit test is extra, not a substitute. Typecheck or compile proves a type-only change; it does not prove runtime behavior.
+
+| Change | Minimum evidence |
+| --- | --- |
+| Comment, doc, rename | Visual inspection; lint/typecheck if cheap |
+| Local code change (function, bugfix, one module) | Scoped test or command above — the narrowest check that can fail |
+| API/contract change | Concrete request/response example or contract test against the new shape |
+| New scaffold or subsystem | Install succeeds, dev/start runs, primary happy path passes, build succeeds |
+| User-visible UI / new screen / new feature path | Screenshot, recorded interaction, or browser-tool verification at the acceptance path — not "looks fine in the diff", not `npm test` alone |
+| Data migration | Dry-run output on representative data + rollback plan |
+| Security-sensitive change | At least one negative test (denied path) and a positive test |
+
+## Things that are not verification
+
+- Re-reading your own diff and feeling confident.
+- A confident **user-facing summary** with no named check — tone is not evidence.
+- "It compiles" for runtime behavior.
+- "The function looks correct" for output correctness.
+- "The docs say so" without trying it.
+- "The previous test still passes" when the new path is what changed.
+- `npm test` / unit tests **alone** when the acceptance sentence is a screen, flow, or user-visible API.
+
+## External facts need sources
+
+When a recommendation depends on an external fact (framework version, API behavior, CVE, benchmark, vendor SLA), name a primary source. Prefer official docs, specs, repo changelogs, or first-party advisories. Flag pages that look stale.
+
+## Independent verification
+
+For high-blast-radius work or when the user asks to mark something done:
+
+- Prefer a **verifier** subagent (`.cursor/agents/verifier.md`) or re-run checks yourself in the parent before **verified**.
+- A subagent's "complete" summary is a **hypothesis** until evidence is named (command output, test pass, screenshot).
+- Cloud or background execution does not change the contract — same labels, same proof depth.
+
+## Honesty beats velocity
+
+A cleanly labeled `implemented but unverified` with the next unblocker is more valuable than a confident `verified` that turns out to be wrong. Surprises downstream cost the user more than an honest hand-off. Any claim in the **user-facing closeout** that would otherwise say "done" must carry one of the three labels above.

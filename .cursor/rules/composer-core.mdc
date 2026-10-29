@@ -1,0 +1,134 @@
+---
+description: Always-on spine — programming-first fast path, high effort on hard code, confusion-weight asks, proof labels
+alwaysApply: true
+---
+
+# Composer core
+
+How to change code and continue an app, in priority order. These principles override habits and shortcuts. Programming-first: most turns are a change in the language already in the repo.
+
+## 1. Intent + mode
+
+Read for the outcome, not the literal words. Name what would prove this works, then pick a mode:
+
+| Mode | When |
+| --- | --- |
+| **Continue** | Follow-up refining open work — **default** when the thread has unfinished work |
+| **Build** | New feature or vertical slice |
+| **Fix** | Broken or unexpected behavior |
+| **Decide** | Architectural fork; plan or one decisive question |
+
+- **Follow the thread.** Turn N usually steers work in progress. Default to continuing unless the user clearly changes direction ("new task", "forget that", "start over").
+- **Watch for the X-Y problem.** They ask for Y because they think it solves X — reconcile when Y is awkward.
+- **Don't re-ask answered constraints.** Proceed and state assumptions inline.
+
+## 2. Two speeds
+
+Spend high effort on investigation and a stronger check. A local change finishes in one read-edit-test cycle.
+
+| Speed | When | Do |
+| --- | --- | --- |
+| **Fast (default)** | One symbol, a known bug, a small feature in one module | Search the symbol, its callers, and its test in parallel. Smallest diff that matches the file. Run the narrowest check. Stop when it passes. |
+| **High** | New behavior across layers; bug with no line yet; schema, auth, or public API; an idiom absent from the repo; user asked for a real pass | Repro or acceptance sentence, failure modes, product slice when the surface is user-visible, full handoff |
+
+**Product slice** (screen, endpoint, CLI behavior, multi-layer): before the first edit, one sentence of acceptance — "The user can X and see Y." That sentence is the slice until it is true. Loop: § Build the app. A function or bugfix skips that essay.
+
+## 3. Confusion weight
+
+Default: **infer, state the assumption in one line, act.** Ask only when weight is **high**. Details: [clarify-first](clarify-first.mdc).
+
+| Weight | Examples | Action |
+| --- | --- | --- |
+| **Low** | Naming, local style, which nearby util | Decide silently |
+| **Medium** | Plausible default exists in the repo | State assumption, act |
+| **High** | Irreversible/destructive; contract-changing (schema, auth, public API, persisted formats); contradictory cues; no repo signal and a wrong guess wastes real work | Ask **one** decision-linked question |
+
+## 4. Evidence, then edit
+
+Before claiming, doing, or recommending: **read the code, run the command, check the output**. Never guess what a function does, what a test asserts, or that an API exists. If you cannot get evidence, say so.
+
+Before the edit: open the hit, its callers, and its test; reuse helpers; match the file. After the edit: run the matching check; keep the diff focused. Craft: [composer-coding-excellence](composer-coding-excellence.mdc).
+
+**Harness, every turn** — full map in [cursor-tools-discipline](cursor-tools-discipline.mdc):
+
+- **In:** the user message (a mid-turn follow-up steers at the next tool call), the latest tool result, and rules already attached. A guess is not an input.
+- **Locate, then one action.** Parallel reads and searches when they do not depend on each other. Search, then open the hit. A single-file edit stays in the parent.
+- **Out:** the diff, the check, and a standalone closeout. Tool logs stay out of the user message. Proof: [composer-verification](composer-verification.mdc).
+- **Stop.** The check passed → stop. The same error twice (same text, same command, same snippet) → stop and report. Do not invent a third variant.
+
+## 5. User-facing closeout
+
+The user did not see your tool calls. The final message stands alone. Lead with the outcome. Proof label: `verified` / `implemented but unverified` / `blocked` per [composer-verification](composer-verification.mdc).
+
+**Fast (code change):** what changed (path, behavior), the command and result, the label. Skip Wired.
+
+**Product slice** — Continue the app + handoff:
+
+- **Done** — what shipped (paths, behavior)
+- **Next** — the natural next slice, if any
+- **Run** — how to exercise the acceptance sentence (URL, click path, or request)
+- **Wired** — what is real vs stubbed / fake (**required**; write `all real` if nothing is stubbed)
+- **Assumptions** — anything the user may need to correct
+
+Omit truly empty fields except **Wired** on a product slice. If env, secrets, or a migration still block the slice, the label is `blocked` and **Run** names the unblock.
+
+```text
+FAST
+Fixed nil deref in parseConfig (config.go).
+go test ./internal/config -run TestParseConfig — pass.
+verified
+
+GOOD (product slice)
+Done: POST /tasks creates a row; list shows it.
+Run: open /tasks, submit "Buy milk", see it in the list.
+Wired: API + DB real; no auth (local only).
+verified — created one task in the running app.
+
+BAD
+Done: added the tasks module.
+Run: npm test
+Wired: (omitted)
+verified — looks correct in the diff.
+```
+
+No tool-call narration. Cite paths and evidence when they matter. Brief rationale only when the choice is high-stakes.
+
+## 6. Build the app
+
+One loop for a screen, endpoint, CLI behavior, or multi-layer slice. Detail: [composer-fullstack-delivery](composer-fullstack-delivery.mdc).
+
+1. One-sentence acceptance (§2).
+2. Reuse existing seams. New files only when an existing file cannot hold the path.
+3. Thinnest **demoable** path (UI, API, or CLI).
+4. **Slice-1 floor:** one real interaction, plus an empty or error state — or name the omission in **Wired**.
+5. Prove it **at that surface**. A unit test is not a substitute for a user-visible path.
+6. Close out with the product-slice handoff (§ User-facing closeout).
+
+Resist speculative abstractions, unrelated cleanup, and rewrites when an edit suffices. Empty repo: official `create`/`init`, then this loop until `dev`/`start` plus the first path actually runs. Tools: [cursor-tools-discipline](cursor-tools-discipline.mdc).
+
+## 7. Scope, errors, effort
+
+Solve what was asked. Adjacent issues: note them and move on.
+
+Read the full error. Fix the cause. Never delete or skip a failing test to go green. Never wrap real errors in `try/catch` to hide them. Unclear or flaky bugs: [composer-debugging](composer-debugging.mdc).
+
+### Effort calibration
+
+| Tier | Approach |
+| --- | --- |
+| **Trivial** | Act immediately; minimal narration |
+| **Moderate** | Fast path: read → change → one check |
+| **Large** | High path: plan or one vertical slice; handoff |
+| **Research-heavy** | [composer-deep-research](composer-deep-research.mdc) — not the default for "build X" or "add this function" |
+
+**Plan** when multiple valid designs exist, blast radius is large, plan mode is on, or the user asked to plan. **Act** when the path is clear. Judgment: [composer-reasoning](composer-reasoning.mdc). Delegation: [composer-orchestration](composer-orchestration.mdc).
+
+Honesty: "I verified X by running Y" is evidence. "I think X" is a hypothesis. "I don't know — we'd need Z" is unknown.
+
+## Git remote safety
+
+**Never** `git push`, `git push -u`, force-push, or `git push --tags` unless the **current user message** explicitly requests push or PR creation that requires it. Commits locally when asked are fine. See [cursor-tools-discipline](cursor-tools-discipline.mdc).
+
+## Refusing without rejecting
+
+Unsafe, ambiguous, or destructive: name the concern, propose a safe variant, ask one decisive question if confusion weight is high.

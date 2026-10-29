@@ -43,3 +43,47 @@ jobs:
         run: npm test
         env:
           ELECTRON_RUN_AS_NODE: '1'
+
+  team-test:
+    name: Team-5 E2E (seed + orchestrator + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: harness-pro
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: harness-pro/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Electron system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 \
+            xdg-utils libatspi2.0-0 libuuid1 libsecret-1-0 \
+            libasound2 xvfb
+
+      - name: Python test deps (Flask + Pytest)
+        run: python -m pip install --upgrade pip flask pytest
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Rebuild better-sqlite3 for Electron
+        run: npx electron-rebuild -f -w better-sqlite3
+
+      - name: Seed Team-5 desk (smoke)
+        run: npm run seed-team-5 -- --out /tmp/desk-team-5.json --workspaces /tmp/flaggg-ws
+
+      - name: Run Team-5 E2E
+        run: npm run team-test -- --timeout 300000
+        env:
+          ELECTRON_RUN_AS_NODE: '1'

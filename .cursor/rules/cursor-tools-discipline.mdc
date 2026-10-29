@@ -1,0 +1,118 @@
+---
+description: Cursor tool harness — what may enter a turn, which tool runs, what may leave, and when to stop. Parallel reads, schema-first MCP, no fabricated output
+alwaysApply: false
+---
+
+# Cursor tools harness
+
+Cursor Agent is instructions, tools, and a model ([agent overview](https://cursor.com/docs/agent/overview)). There is no cap on tool calls. This rule is the cap: what comes in, which tool runs, what goes out, and when the loop stops.
+
+The always-on loop lives in [composer-core](composer-core.mdc) § Evidence, then edit. This file is the map.
+
+## In
+
+Only these may decide the next action:
+
+- The user message. A follow-up sent while you are working arrives at the **next tool call** and steers from there. Finish the in-flight call, then apply it. A queued message waits until the turn ends.
+- Rules and skills already attached.
+- The **latest** tool result: the file slice, the command output, the schema, the snapshot, the child summary.
+- A child **summary**. Raw child logs stay out of the parent.
+
+These are not inputs:
+
+- A guess standing in for a result you did not run.
+- A full-tree read when a search hit exists.
+- The same file again, unless the last read left a named question.
+- The old text of a file you already edited. Re-read the hunk you changed, not the whole tree.
+- A secret, token, or credential copied out of tool output into source or into the user message.
+
+## Loop
+
+1. **Locate** — file, then symbol, then line. No edit before a location.
+2. **Act once** — one edit or one command. Independent reads go out in one batch.
+3. **Read the result.** That result is the next query.
+4. **Stop.**
+   - The check passed → stop.
+   - The same failure twice (same error text, same command, same snippet) → stop and report. Do not send a third variant.
+   - Network, sandbox, or auth blocked the call → label **blocked** and name the unblock. Do not retry the identical call.
+   - The tool does not exist or the MCP schema has no such parameter → say so. Do not invent the call.
+
+## Pick the tool
+
+Prefer structured file tools over shell for read, search, and edit.
+
+| Job | Tool | Keep out |
+| --- | --- | --- |
+| Read a file | structured file reader | `cat`, `head`, `tail` |
+| Find files by name | glob | `find`, `ls -R` |
+| Search by content | ripgrep / grep tool | shell `grep`, reading the tree |
+| Edit | structured edit | `sed`, `awk`, heredoc redirects |
+| Run a command | shell | file tools |
+| External system | MCP, after the live schema | remembered argument names |
+| Wide codebase search | **Explore** subagent, or parallel grep; parent keeps the summary | dozens of sequential reads in the parent |
+| Long or noisy shell | **Bash** subagent or a background shell | full logs in the user message |
+| UI proof | **Browser** (snapshot, screenshot, console, network) | "looks fine in the diff" |
+| Isolated specialist work | Task with goal, constraints, pointers, done, return shape | "help me with this" |
+
+A single-file edit, one test, or one MCP call stays in the parent. Delegation rules: [composer-orchestration](composer-orchestration.mdc).
+
+Built-in Explore, Bash, and Browser exist to keep noisy output out of the parent ([subagents](https://cursor.com/docs/agent/subagents)). Cloud subagents use the team's MCP config, not the local session's servers.
+
+## Out
+
+What may leave the turn:
+
+- The edit, through the structured edit tool.
+- The one command that is the check.
+- The user message: outcome, the evidence, the proof label ([composer-core](composer-core.mdc) § User-facing closeout).
+
+What stays inside:
+
+- Tool-call narration and raw logs.
+- A child's "done", until the parent names the evidence.
+- Invented stdout, a test result you did not see, a timeout you did not wait out.
+- `git push`, force-push, or `--tags`, unless this user message asked for push or a PR that requires it.
+
+### Git
+
+| Allowed without an extra ask | Requires an explicit ask in **this** turn |
+| --- | --- |
+| `git status`, `git diff`, `git log`, `git add`, `git commit` when the user asked to commit | `git push`, `git push -u`, `git push --force`, `git push --tags` |
+| `gh pr view`, `gh pr checks`, read-only `gh` | Any command whose effect is updating `origin` |
+
+Do not chain `&& git push` onto a fix or a PR script the user did not ask to push.
+
+## MCP
+
+MCP tools, prompts, resources, and apps change ([MCP](https://cursor.com/docs/mcp)). Same run mode as the terminal: allowlisted calls run, the rest go through review.
+
+1. Read the live schema. Parameters, required fields, return shape.
+2. Call with those fields. Do not invent names from memory.
+3. Authenticate when a call fails for auth. Do not re-auth first.
+4. Promise only what the schema lists.
+5. If the server is missing or errors, fall back to official docs or **blocked** ([composer-verification](composer-verification.mdc)).
+
+## Browser
+
+Use the browser when the claim is something on a page ([browser tools](https://cursor.com/docs/agent/tools/browser)).
+
+- Snapshot for structure. Screenshot for layout, styling, and empty states.
+- Console and network when the bug is a runtime or request failure.
+- Exercise the path: click, type, submit. A single screenshot is not the check.
+- Cite the artifact. An origin allowlist can block navigation; if it does, say so.
+
+## Shell
+
+- Non-interactive flags (`-y`, `--no-input`, `CI=1`).
+- The project's own scripts (`package.json`, `Makefile`, `justfile`) before a hand-rolled equivalent.
+- Background a long build. Tell the user which terminal holds the output.
+- Quote paths with spaces.
+- Destructive commands (`rm -rf`, `git push --force`, dropping a database) wait for an explicit yes in this turn.
+
+## Web
+
+Facts outside the repo come from primary sources: official docs, RFCs, changelogs, advisories. Put the current date in the query when freshness matters. For security, compliance, or vendor behavior, open a second independent source. Cite pages you opened.
+
+## When the tools run out
+
+State what you tried, what is missing (credential, environment, file), and the smallest unblock. Then stop.
