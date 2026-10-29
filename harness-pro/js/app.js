@@ -315,7 +315,8 @@
     var nodes = Object.keys(lay.nodes).map(function (id) {
       var n = lay.nodes[id];
       var status = window.TaskEvents ? window.TaskEvents.nodeStatus(state, id) : '';
-      return '<button type="button" class="net-node' + (status ? ' ' + status : '') + '" style="left:' + n.x + 'px;top:' + n.y + 'px" data-act="node" data-id="' + esc(id) + '"><b>' + esc(n.label) + '</b><small>' + esc(id) + '</small></button>';
+      var selectedCls = (id === state.node ? ' on' : '');
+      return '<button type="button" class="net-node' + (status ? ' ' + status : '') + selectedCls + '" style="left:' + n.x + 'px;top:' + n.y + 'px" data-act="node" data-id="' + esc(id) + '"><b>' + esc(n.label) + '</b><small>' + esc(id) + '</small></button>';
     }).join('');
     return '<article class="card net-card"><div class="between"><h3>' + ic('nodes') + ' Rollen-Netzwerk</h3><span class="pill">' + net.nodes.length + ' Knoten · ' + net.edges.length + ' Kanten</span></div>' +
       '<div class="net" style="height:' + lay.height + 'px">' +

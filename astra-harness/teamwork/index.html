@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiniVault</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="container">
+
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">MV</span>
+        <div>
+          <h1>MiniVault</h1>
+          <p class="tagline">Dein einfacher Passwort-Tresor</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Fehlerbanner: alle API-Fehler landen hier sichtbar -->
+    <div id="error-banner" class="error-banner" role="alert" hidden>
+      <span id="error-text"></span>
+      <button id="error-close" type="button" class="icon-btn" aria-label="Fehlermeldung schließen" title="Schließen">×</button>
+    </div>
+
+    <main>
+
+      <!-- Übersicht: Tresore -->
+      <section id="vaults-section" aria-labelledby="vaults-heading">
+        <div class="card">
+          <h2 id="vaults-heading">Tresore</h2>
+
+          <form id="create-vault-form" class="create-form">
+            <label for="new-vault-name">Name des neuen Tresors</label>
+            <div class="row">
+              <input type="text" id="new-vault-name" required maxlength="80"
+                     placeholder="z.B. Privat, Arbeit, Familie …">
+              <button type="submit" class="btn btn-primary">Tresor anlegen</button>
+            </div>
+          </form>
+
+          <div id="vaults-status" class="status" hidden></div>
+          <ul id="vaults-list" class="vault-grid" aria-label="Vorhandene Tresore"></ul>
+        </div>
+      </section>
+
+      <!-- Detailansicht: ein geöffneter Tresor -->
+      <section id="detail-section" aria-labelledby="detail-heading" hidden>
+        <div class="card">
+          <div class="detail-topbar">
+            <button id="back-btn" type="button" class="btn btn-ghost">← Zurück</button>
+            <h2 id="detail-heading">Tresor</h2>
+          </div>
+
+          <form id="add-entry-form" class="entry-form">
+            <h3>Neuer Eintrag</h3>
+            <div class="entry-form-grid">
+              <div class="field">
+                <label for="entry-title">Titel</label>
+                <input type="text" id="entry-title" required maxlength="100" placeholder="z.B. GitHub">
+              </div>
+              <div class="field">
+                <label for="entry-username">Benutzername</label>
+                <input type="text" id="entry-username" maxlength="200" placeholder="z.B. max@example.com">
+              </div>
+              <div class="field">
+                <label for="entry-secret">Geheimnis / Passwort</label>
+                <input type="password" id="entry-secret" required maxlength="500" placeholder="••••••••">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Eintrag speichern</button>
+          </form>
+
+          <div id="entries-status" class="status" hidden></div>
+          <ul id="entries-list" class="entries-list" aria-label="Einträge des Tresors"></ul>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">
+      <p>MiniVault · Backend erwartet unter http://127.0.0.1:9871</p>
+    </footer>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

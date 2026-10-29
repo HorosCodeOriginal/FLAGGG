@@ -490,3 +490,4 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .net-node.done { border-color: #3ee0a0; }
 .net-node.failed { border-color: #ff5d73; }
 .net-node.failed b { color: #ff9aa8; }
+.net-node.on { border-color: #5b9dff; box-shadow: 0 0 0 2px rgba(91, 157, 255, 0.25); }

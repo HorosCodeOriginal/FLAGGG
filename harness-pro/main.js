@@ -880,13 +880,31 @@ async function runLiveTest() {
     console.log('[live-test] rollen: ' + booted.started + '/' + booted.total);
     console.log('[live-test] laeuft ...');
 
+    // Ziel-Task feuern. better-sqlite3 ist gegen die Electron-ABI gebaut:
+    // fire-test-task.js startet sich deshalb selbst mit ELECTRON_RUN_AS_NODE.
+    try {
+      const { spawnSync } = require('child_process');
+      const electronBin = path.join(ROOT, 'node_modules', 'electron', 'dist',
+        process.platform === 'win32' ? 'electron.exe' : 'electron');
+      const fireScript = path.join(ROOT, 'scripts', 'fire-test-task.js');
+      const fire = spawnSync(electronBin, [fireScript, '--db', dbFile], {
+        stdio: 'inherit',
+        env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' }),
+      });
+      if (fire.status !== 0) {
+        console.error('[live-test] fire-test-task fehlgeschlagen: ' + fire.status);
+      }
+    } catch (err) {
+      console.error('[live-test] fire-test-task start fehlgeschlagen: ' + err.message);
+    }
+
     await new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
     const tasks = await client.listTasks({ limit: 100 });
     const counts = {};
     tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
     console.log('[live-test] task-status: ' + JSON.stringify(counts));
-    tasks.filter(t => String(t.request_id || '').startsWith('live-test-')).forEach(t => {
+    tasks.filter(t => String(t.request_id || '').startsWith('live-')).forEach(t => {
       const result = t.result && typeof t.result === 'object' ? JSON.stringify(t.result).slice(0, 200) : String(t.result || '');
       console.log('[live-test] ' + t.request_id + ' -> ' + t.state + (result ? ' | ' + result : ''));
     });
@@ -898,7 +916,11 @@ async function runLiveTest() {
         console.log('[live-test] hallo.py: ' + JSON.stringify(fs.readFileSync(script, 'utf8')));
       } else {
         console.log('[live-test] hallo.py fehlt in ' + sub.workspace);
+        process.exitCode = 1;
       }
+    } else {
+      console.error('[live-test] rolle sub_opus nicht gefunden - live-test unvollstaendig');
+      process.exitCode = 1;
     }
   } catch (err) {
     console.error('[live-test] fehler: ' + err.message);

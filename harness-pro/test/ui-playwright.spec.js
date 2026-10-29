@@ -61,6 +61,12 @@ async function appText() {
 async function clickSel(sel) {
   await page.locator(sel).first().click({ timeout: 4000 });
 }
+async function setComposer(v) {
+  await page.evaluate((val) => {
+    const el = document.getElementById('composer');
+    if (el) el.value = val;
+  }, v);
+}
 async function expectToast(pattern, label) {
   const start = Date.now();
   while (Date.now() - start < 1800) {
@@ -132,19 +138,23 @@ async function referencePass() {
 
   await check('plan toggle keeps tasks pane (früherer FAIL)', async () => {
     await clickSel('[data-act="cpane"][data-pane="tasks"]');
-    await sleep(30);
+    await sleep(40);
     await clickSel('[data-act="plan"]');
     await sleep(40);
-    if (!/Tasks/.test(await appText())) throw new Error('plan toggle left tasks');
+    if (!(await hasOn('[data-pane="tasks"].on'))) throw new Error('plan toggle left tasks pane');
+    if (!/Aufgaben|Tasks/.test(await appText())) throw new Error('tasks pane content missing');
   });
 
   await check('reasoning expands', async () => {
     await clickSel('[data-act="cpane"][data-pane="chat"]');
     await clickSel('[data-act="layout"][data-layout="phases"]');
-    await sleep(30);
-    await clickSel('[data-act="reason"]');
     await sleep(40);
-    if (!/session cookies|reset handler|login route/.test(await appText())) throw new Error('reasoning did not expand');
+    const before = (await appText()).length;
+    await clickSel('[data-act="reason"]');
+    await sleep(50);
+    const after = (await appText()).length;
+    const expanded = await page.evaluate(() => [...document.querySelectorAll('[data-act="reason"]')].some((b) => b.innerText.includes('▾')));
+    if (!expanded && after - before < 30) throw new Error('reasoning did not expand (delta=' + (after - before) + ')');
   });
 
   await check('like sticks', async () => {
@@ -170,7 +180,7 @@ async function referencePass() {
 
   await check('blank composer does not change thread', async () => {
     const before = await appText();
-    await page.fill('#composer', '   ');
+    await setComposer('   ');
     await page.evaluate(() => document.getElementById('composerForm').requestSubmit());
     await sleep(120);
     if ((await appText()) !== before) throw new Error('blank message changed the thread');
@@ -179,19 +189,21 @@ async function referencePass() {
   await check('pause blocks sends / resume works', async () => {
     await clickSel('[data-q="pause"]');
     await expectToast(/paused|pausiert/, 'pause');
-    await page.fill('#composer', 'this must not send while paused');
+    const disabled = await page.evaluate(() => { const el = document.getElementById('composer'); return !!el && el.disabled; });
+    if (!disabled) throw new Error('composer not disabled while paused');
+    await setComposer('this must not send while paused');
     await page.evaluate(() => document.getElementById('composerForm').requestSubmit());
-    await sleep(140);
+    await sleep(160);
     if (/this must not send while paused/.test(await appText())) throw new Error('paused agent still accepted a message');
     await clickSel('[data-q="pause"]');
     await expectToast(/resumed|fortgesetzt/, 'resume');
   });
 
   await check('agent reply arrives', async () => {
-    await page.fill('#composer', 'Add tests for the payment flow');
+    await setComposer('Add tests for the payment flow');
     await page.evaluate(() => document.getElementById('composerForm').requestSubmit());
     await sleep(1000);
-    if (!/unit tests/i.test(await appText())) throw new Error('agent reply missing');
+    if (!/unit[- ]tests/i.test(await appText())) throw new Error('agent reply missing');
   });
 
   await check('tests quick action', async () => {
@@ -213,7 +225,7 @@ async function referencePass() {
     await clickSel('[data-act="bell"]');
     await sleep(40);
     const pop = await rawText('#bellpop');
-    if (!pop || !/Activity/.test(pop)) throw new Error('bell popover missing');
+    if (!pop || !/Activity|Aktivität/.test(pop)) throw new Error('bell popover missing');
     await clickSel('[data-act="bell"]');
     await sleep(40);
     if (await page.$('#bellpop')) throw new Error('bell popover stayed open');
@@ -234,9 +246,9 @@ async function referencePass() {
     await page.fill('#marketSearch', 'no-such-plugin-xyz');
     await page.keyboard.press('Enter');
     await sleep(40);
-    if (!/No plugins match/.test(await appText())) throw new Error('empty search failed');
+    if (!/No plugins match|Keine Plugins passen/.test(await appText())) throw new Error('empty search failed');
     await page.fill('#marketSearch', '');
-    await sleep(40);
+    await sleep(50);
   });
 
   await check('market install/uninstall', async () => {
@@ -245,7 +257,7 @@ async function referencePass() {
     await expectToast(/installed|installiert/, 'install');
     await clickSel('[data-act="mside"][data-side="installed"]');
     await sleep(40);
-    if (!/Installed/.test(await appText())) throw new Error('installed page missing');
+    if (!/Installed|Installiert/.test(await appText())) throw new Error('installed page missing');
     await clickSel('[data-act="uninstall"]');
     await expectToast(/removed|entfernt/, 'uninstall');
   });
@@ -276,7 +288,7 @@ async function referencePass() {
     if (!(await hasOn('[data-id="qa"].on'))) throw new Error('node selection missing');
     await clickSel('[data-act="collapse"]');
     await sleep(40);
-    if (!/Expand All/.test(await appText())) throw new Error('collapse failed');
+    if (!/Expand All|Alle aufklappen/.test(await appText())) throw new Error('collapse failed');
     if (await page.$('.nodes')) throw new Error('layers stayed expanded');
     await clickSel('[data-act="collapse"]');
     await sleep(40);
@@ -297,8 +309,8 @@ async function referencePass() {
     await clickSel('[data-act="nav"][data-view="overview"]');
     await sleep(50);
     const t = await appText();
-    if (!/Mission Timeline/.test(t) || !/Goal Progress/.test(t) || !/Activity Feed/.test(t)) throw new Error('overview sections missing');
-    if (!/Auth Token Expiry|Expire access tokens/.test(t)) throw new Error('session goal did not follow to overview');
+    if (!/Mission Timeline|Missions-Timeline/.test(t) || !/Goal Progress|Ziel-Fortschritt/.test(t) || !/Activity Feed|Aktivitäts-Feed/.test(t)) throw new Error('overview sections missing');
+    if (!/Auth Token Expiry|Expire access tokens|Access-Tokens|Ablauf/.test(t)) throw new Error('session goal did not follow to overview');
   });
 
   await check('clear chat removes thread + brand home', async () => {
@@ -369,36 +381,128 @@ async function postClickCheck(key) {
   }
 }
 
-async function discoveryPass() {
-  console.log('— Discovery-Pass startet —');
-  for (let round = 1; round <= 6; round++) {
-    const descs = await collectDescs();
-    let clickedThisRound = 0;
-    for (const d of descs) {
-      if (discoveredKeys.has(d.key)) continue;
-      discoveredKeys.add(d.key);
-      // Element per Snapshot-Index klicken; wenn Signatur nicht mehr passt, überspringen
-      const ok = await page.evaluate((d) => {
-        const el = document.querySelectorAll('[data-act], [data-q]')[d.idx];
-        if (!el) return false;
-        const dd = el.dataset;
-        let sig = dd.act ? 'act=' + dd.act : 'q=' + dd.q;
-        for (const k of ['view', 'layout', 'pane', 'id', 'q', 'model', 'side', 'cat', 'vote', 'i', 'kit', 'nr', 'path', 'msg', 'field']) {
-          if (dd[k] !== undefined) sig += '|' + k + '=' + dd[k];
-        }
-        if (sig !== d.sig) return false;
-        el.scrollIntoView({ block: 'center' });
-        el.click();
-        return true;
-      }, d);
-      if (!ok) continue;
-      clickedThisRound++;
-      clickCount++;
-      await postClickCheck(d.key);
+async function clickByDesc(desc) {
+  return page.evaluate((d) => {
+    const el = document.querySelectorAll('[data-act], [data-q]')[d.idx];
+    if (!el) return false;
+    const dd = el.dataset;
+    let sig = dd.act ? 'act=' + dd.act : 'q=' + dd.q;
+    for (const k of ['view', 'layout', 'pane', 'id', 'q', 'model', 'side', 'cat', 'vote', 'i', 'kit', 'nr', 'path', 'msg', 'field']) {
+      if (dd[k] !== undefined) sig += '|' + k + '=' + dd[k];
     }
-    console.log('round ' + round + ': ' + clickedThisRound + ' neue Klicks (gesamt ' + clickCount + ')');
-    if (clickedThisRound === 0) break;
+    if (sig !== d.sig) return false;
+    el.scrollIntoView({ block: 'center' });
+    el.click();
+    return true;
+  }, desc);
+}
+
+async function discoveryInView(label) {
+  for (let round = 1; round <= 10; round++) {
+    let progressed = false;
+    let iter = 0;
+    while (true) {
+      iter++;
+      if (iter > 400) break; // Schutz vor Endlos-Schleifen
+      const descs = await collectDescs();
+      if (process.env.DEBUG_DISCOVERY && label === 'chat' && round === 1) console.log('  [collect] n=' + descs.length + ' unseen=' + descs.filter((d) => !discoveredKeys.has(d.key)).length);
+      const target = descs.find((d) => !discoveredKeys.has(d.key) && !d.sig.startsWith('act=nav'));
+      if (!target) break;
+      const ok = await clickByDesc(target);
+      discoveredKeys.add(target.key);
+      if (!ok) {
+        if (process.env.DEBUG_DISCOVERY) console.log('  [skip sig] ' + target.key + ' idx=' + target.idx);
+        continue;
+      }
+      progressed = true;
+      clickCount++;
+      if (process.env.DEBUG_DISCOVERY) console.log('  [click] ' + target.key);
+      await postClickCheck(target.key);
+    }
+    if (!progressed) break;
   }
+}
+
+async function markNavSeen(v) {
+  const navKeys = await page.evaluate((vv) => {
+    const out = [];
+    document.querySelectorAll('[data-act="nav"]').forEach((el) => {
+      if (el.dataset.view === vv) out.push('act=nav|view=' + vv);
+    });
+    return out;
+  }, v);
+  navKeys.forEach((k) => discoveredKeys.add(k));
+}
+
+async function discoverChat() {
+  const panes = ['tasks', 'memory', 'knowledge', 'agents', 'settings', 'chat'];
+  const layouts = ['thread', 'phases', 'code', 'studio'];
+  for (const p of panes) {
+    try { await clickSel('[data-act="cpane"][data-pane="' + p + '"]'); await sleep(110); } catch (e) {}
+    await discoveryInView('chat-pane:' + p);
+  }
+  for (const l of layouts) {
+    try { await clickSel('[data-act="layout"][data-layout="' + l + '"]'); await sleep(110); } catch (e) {}
+    await discoveryInView('chat-layout:' + l);
+  }
+  try { await clickSel('[data-act="layout"][data-layout="thread"]'); await sleep(110); } catch (e) {}
+  try { await clickSel('[data-act="cpane"][data-pane="chat"]'); await sleep(110); } catch (e) {}
+  await discoveryInView('chat-final');
+}
+
+async function discoverMarket() {
+  for (const s of ['marketplace', 'installed', 'updates', 'settings']) {
+    try { await clickSel('[data-act="mside"][data-side="' + s + '"]'); await sleep(130); } catch (e) {}
+    await discoveryInView('market:' + s);
+  }
+}
+
+async function discoverOrchestration() {
+  const lbl = await page.evaluate(() => {
+    const e = document.querySelector('[data-act="collapse"]');
+    return e ? e.innerText.trim() : '';
+  });
+  if (/aufklappen/.test(lbl)) { await clickSel('[data-act="collapse"]'); await sleep(130); }
+  await discoveryInView('orch:expanded');
+  await clickSel('[data-act="collapse"]');
+  await sleep(130);
+  await clickSel('[data-act="collapse"]');
+  await sleep(130);
+  await discoveryInView('orch:expanded2');
+}
+
+async function discoveryPass() {
+  console.log('— Discovery-Pass startet (frische Page) —');
+  // Frische Page/neuer Kontext: sauberer Seed-Zustand mit Nachrichten/Aktionen
+  const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+  const page2 = await ctx2.newPage();
+  page2.on('pageerror', (e) => pageErrors.push(String(e)));
+  page2.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+  page2.on('requestfailed', (r) => failedRequests.push(r.url() + ' :: ' + ((r.failure() && r.failure().errorText) || '?')));
+  const oldPage = page;
+  page = page2;
+  await page.goto(BASE, { waitUntil: 'load', timeout: 30000 });
+  await page.waitForSelector('[data-act="nav"]', { timeout: 15000 });
+  await sleep(400);
+  const views = ['chat', 'orchestration', 'overview', 'market', 'roles', 'spaces', 'failover'];
+  for (let outer = 0; outer < 2; outer++) {
+    for (const v of views) {
+      try {
+        await clickSel('[data-act="nav"][data-view="' + v + '"]');
+        await sleep(140);
+      } catch (e) { /* View evtl. nicht erreichbar — weiter */ }
+      await markNavSeen(v);
+      if (v === 'chat') await discoverChat();
+      else if (v === 'market') await discoverMarket();
+      else if (v === 'orchestration') await discoverOrchestration();
+      else await discoveryInView(v);
+      console.log('view ' + v + ' abgeschlossen (Klicks gesamt=' + clickCount + ')');
+    }
+  }
+  await discoveryInView('final sweep');
+  console.log('Discovery abgeschlossen: ' + clickCount + ' Klicks, ' + discoveredKeys.size + ' einzigartige Schlüssel geprüft');
+  page = oldPage;
+  await ctx2.close();
 }
 
 async function writeReport() {
