@@ -163,3 +163,30 @@ git merge upstream/main
 | Docker-Befehle fehlen | Docker Desktop starten; `docker info` prüfen |
 | `docker compose` nicht gefunden | Docker Desktop neu starten oder CLI-Pfad prüfen |
 | node-pty-Buildfehler | Xcode-Tools vorhanden? `npm rebuild node-pty` |
+
+---
+
+## 10. Zwei separate Harness-Instanzen (Astra + Opus)
+
+Willst du — wie im Windows-Setup — **zwei separate Desktop-Harnesse** (Astra 1
+und Opus 1) parallel laufen lassen, nutze das Paket `mac-setup/`:
+
+```bash
+# 1. Profile installieren
+mkdir -p ~/.dsh/profiles
+cp -R mac-setup/profiles/astra ~/.dsh/profiles/astra
+cp -R mac-setup/profiles/opus  ~/.dsh/profiles/opus
+
+# 2. Dienste starten (4 Terminals)
+node mac-setup/services/inception-pool.js
+node mac-setup/services/primary-router.js
+node fr-gateway/tools/free-model-bridge.js
+node fr-gateway/tools/light-upstream.js
+
+# 3. Keys in ~/.dsh/.credentials.yaml eintragen (siehe mac-setup/README.md)
+# 4. Starten
+bash mac-setup/start-astra.command
+bash mac-setup/start-opus.command
+```
+
+Details, Stolpersteine und Autostart: **`mac-setup/README.md`**.

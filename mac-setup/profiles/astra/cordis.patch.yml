@@ -1,0 +1,72 @@
+# Your patch layer for this dsh profile, applied after every bundle layer
+# UMGEBEN AUF NUR ASTRA: alle Inception-Modelle entfernt, einziges Modell:
+# gpt-6-astra via lokaler fr-gateway (127.0.0.1:20129), Key aus ~/.dsh/.credentials.yaml (ASTRA_API_KEY).
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: standard
+    performanceUsage: detailed
+- id: ui-settings
+  name: "@deepseek-ai/dsh-client-ui-settings"
+  config:
+    enabled: true
+- id: ui-settings-account
+  name: "@deepseek-ai/dsh-client-ui-settings-account"
+  config:
+    version: 1
+    step: done
+    usage: detailed
+    developerTools: true
+    purpose: null
+    process: standard
+    completion: api-key
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: dark
+- id: subagent-model-selection-settings
+  name: "@deepseek-ai/dsh-tool-subagent/model-selection-settings"
+  config:
+    enabled: true
+    allowedModels:
+      - provider: astra
+        model: gpt-6-astra
+- id: permission
+  name: "@deepseek-ai/dsh-permission-presets"
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+    defaultPreset: danger-full-access
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: astra
+    model: gpt-6-astra
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      astra:
+        displayName: Astra
+        apiKeyEnv: ASTRA_API_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:20129/v1
+        models:
+          - id: gpt-6-astra
+            name: Astra GPT-6
+            input:
+              - text
+              - image
+            reasoningEfforts:
+              off: null
+              low: low
+              medium: medium
+              high: high
